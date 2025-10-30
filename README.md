@@ -168,19 +168,28 @@ Edit `configs/models_config.json` to add new models:
 {
   "preprocessing": {
     "FBP": {
-      "name": "FBP",
-      "description": "Filtered Back Projection",
-      "requires_training": false
+      "name": "Filtered Back Projection",
+      "description": "Standard FBP reconstruction algorithm",
+      "filters": ["ram-lak", "shepp-logan", "cosine", "hamming", "hann"],
+      "default_filter": "ram-lak"
     }
   },
   "postprocessing": {
     "UNet_V1": {
-      "name": "UNet_V1",
-      "description": "U-Net for denoising",
-      "requires_training": true
+      "name": "U-Net V1",
+      "description": "U-Net architecture with skip connections for high-quality reconstruction",
+      "class": "UNet_V1",
+      "in_channels": 1,
+      "out_channels": 1
+    },
+    "ThreeL_SSNet": {
+      "name": "Three-Level Squeeze-and-Excitation Network",
+      "description": "Lightweight three-level squeeze-and-excitation network for fast enhancement",
+      "class": "ThreeL_SSNet"
     }
   }
 }
+
 ```
 
 ## 📊 Example Workflow
