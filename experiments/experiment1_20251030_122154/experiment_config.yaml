@@ -1,0 +1,20 @@
+experiment:
+  name: experiment1_20251030_122154
+  description: first experiment test
+  created_at: '2025-10-30T12:22:48.465880'
+  timestamp: '20251030_122154'
+datasets:
+  train: C:\Users\jonas\develop_area\tirocinio\data\Mayo_s Dataset\train
+  test: C:\Users\jonas\develop_area\tirocinio\data\Mayo_s Dataset\test
+  train_samples: 3306
+  test_samples: 327
+output_dirs:
+  base: experiments\experiment1_20251030_122154
+  models: experiments\experiment1_20251030_122154\trained_models
+  results: experiments\experiment1_20251030_122154\test_results
+  benchmarks: experiments\experiment1_20251030_122154\benchmarks
+  logs: experiments\experiment1_20251030_122154\logs
+  checkpoints: experiments\experiment1_20251030_122154\checkpoints
+configs:
+  projection_geometry: configs/projection_geometry.json
+  models: configs/models_config.json

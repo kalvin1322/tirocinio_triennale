@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-10-30T15:34:04.594010",
+  "experiment": "experiment1_20251030_122154",
+  "model": {
+    "name": "FBP_UNet_V1",
+    "checkpoint": "experiments\\experiment1_20251030_122154\\trained_models\\FBP_UNet_V1.pth",
+    "architecture": "UNet_V1"
+  },
+  "dataset": {
+    "path": "C:\\Users\\jonas\\develop_area\\tirocinio\\data\\Mayo_s Dataset\\test",
+    "num_samples": 327
+  },
+  "metrics": {
+    "loss": 0.01895884197296166,
+    "ssim": 0.8195716142654419,
+    "psnr": 28.583744049072266
+  },
+  "device": "cuda",
+  "loss_function": "L1Loss"
+}

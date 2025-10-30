@@ -1,0 +1,5 @@
+experiments:
+- name: experiment1_20251030_122154
+  description: first experiment test
+  created_at: '2025-10-30T12:22:48.485118'
+  config_path: experiments\experiment1_20251030_122154\experiment_config.yaml

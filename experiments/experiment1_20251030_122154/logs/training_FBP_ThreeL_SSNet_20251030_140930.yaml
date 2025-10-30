@@ -1,0 +1,11 @@
+type: training
+model_name: FBP_ThreeL_SSNet
+preprocessing: FBP
+postprocessing: ThreeL_SSNet
+dataset: C:\Users\jonas\develop_area\tirocinio\data\Mayo_s Dataset\train
+epochs: 1
+batch_size: 8
+learning_rate: 0.1
+device: cuda
+started_at: '2025-10-30T14:09:30.299689'
+experiment: experiment1_20251030_122154

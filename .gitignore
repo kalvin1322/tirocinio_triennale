@@ -1,3 +1,6 @@
 Mayo_s Dataset/
 __pycache__/
 .vscode/
+data/*
+!data/README.md
+!data/.gitkeep
