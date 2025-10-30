@@ -70,23 +70,13 @@ Direct commands for scripts, batch jobs, and SLURM:
 python run.py create-experiment --name my_experiment --train-dataset "data/Mayo_s Dataset/train" --test-dataset "data/Mayo_s Dataset/test"
 
 # Train model
-python run.py train \
-  --experiment my_experiment \
-  --postprocessing UNet_V1 \
-  --epochs 50 \
-  --batch-size 8
+python run.py train --experiment my_experiment --postprocessing UNet_V1 --epochs 50 --batch-size 8
 
 # Test with visualization
-python run.py test \
-  --experiment my_experiment \
-  --checkpoint FBP_UNet_V1.pth \
-  --visualize \
-  --num-samples 10
+python run.py test --experiment my_experiment --checkpoint FBP_UNet_V1.pth --visualize --num-samples 10
 
 # Benchmark multiple models
-python run.py benchmark \
-  --experiment my_experiment \
-  --postprocessing UNet_V1,ThreeL_SSNet
+python run.py benchmark --experiment my_experiment --postprocessing UNet_V1,ThreeL_SSNet
 ```
 
 **Perfect for:**
@@ -95,7 +85,7 @@ python run.py benchmark \
 - 🔄 **Batch processing** multiple experiments
 - 📊 **Hyperparameter sweeps**
 
-📖 **Full CLI documentation with examples**: [docs/CLI_USAGE.md](docs/CLI_USAGE.md)
+📖 **Full CLI documentation with examples**: [CLI_USAGE.md](docs/CLI_USAGE.md)
 
 ## 🎯 Model Pipeline System
 

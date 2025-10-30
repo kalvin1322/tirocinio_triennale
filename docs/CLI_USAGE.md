@@ -166,8 +166,7 @@ python run.py test --experiment my_old_experiment --checkpoint FBP_UNet_V1_enc4_
 Compare multiple models side-by-side:
 
 ```bash
-python run.py benchmark \
-  --postprocessing UNet_V1,ThreeL_SSNet
+python run.py benchmark --postprocessing UNet_V1,ThreeL_SSNet
 ```
 
 **Options:**
@@ -182,13 +181,10 @@ python run.py benchmark \
 python run.py benchmark --postprocessing UNet_V1,ThreeL_SSNet
 
 # Benchmark with specific experiment
-python run.py benchmark \
-  --experiment my_experiment \
-  --postprocessing UNet_V1,ThreeL_SSNet
+python run.py benchmark --experiment my_experiment --postprocessing UNet_V1,ThreeL_SSNet
 
 # Compare three models
-python run.py benchmark \
-  --postprocessing UNet_V1,ThreeL_SSNet,CustomModel
+python run.py benchmark --postprocessing UNet_V1,ThreeL_SSNet,CustomModel
 ```
 
 **Output:**
