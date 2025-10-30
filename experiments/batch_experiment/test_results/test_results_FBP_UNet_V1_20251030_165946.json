@@ -1,0 +1,20 @@
+{
+  "timestamp": "2025-10-30T16:59:46.537457",
+  "experiment": "batch_experiment",
+  "model": {
+    "name": "FBP_UNet_V1",
+    "checkpoint": "experiments\\batch_experiment\\trained_models\\FBP_UNet_V1.pth",
+    "architecture": "UNet_V1"
+  },
+  "dataset": {
+    "path": "data\\Mayo_s Dataset\\test",
+    "num_samples": 327
+  },
+  "metrics": {
+    "loss": 0.040806577927092226,
+    "ssim": 0.5946605205535889,
+    "psnr": 22.41243553161621
+  },
+  "device": "cuda",
+  "loss_function": "L1Loss"
+}

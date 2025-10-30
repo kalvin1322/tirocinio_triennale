@@ -20,8 +20,7 @@ experiments/
 │   ├── trained_models/             # Trained models
 │   ├── test_results/               # Test results
 │   ├── benchmarks/                 # Benchmark results
-│   ├── logs/                       # Operation logs
-│   └── checkpoints/                # Intermediate checkpoints
+│   └── logs/                       # Operation logs
 └── experiment_custom_name/         # Example: experiment with custom name
     ├── experiment_config.yaml
     ├── trained_models/
@@ -76,7 +75,6 @@ output_dirs:
   results: experiments/experiment_20231030_143022/test_results
   benchmarks: experiments/experiment_20231030_143022/benchmarks
   logs: experiments/experiment_20231030_143022/logs
-  checkpoints: experiments/experiment_20231030_143022/checkpoints
 
 configs:
   projection_geometry: configs/projection_geometry.json

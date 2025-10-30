@@ -162,8 +162,7 @@ def run_wizard():
             'models': experiment_base / "trained_models",
             'results': experiment_base / "test_results",
             'benchmarks': experiment_base / "benchmarks",
-            'logs': experiment_base / "logs",
-            'checkpoints': experiment_base / "checkpoints"
+            'logs': experiment_base / "logs"
         }
         
         for name, dir_path in output_dirs.items():
@@ -191,8 +190,7 @@ def run_wizard():
                 'models': str(output_dirs['models']),
                 'results': str(output_dirs['results']),
                 'benchmarks': str(output_dirs['benchmarks']),
-                'logs': str(output_dirs['logs']),
-                'checkpoints': str(output_dirs['checkpoints'])
+                'logs': str(output_dirs['logs'])
             },
             'configs': {
                 'projection_geometry': 'configs/projection_geometry.json',
@@ -242,3 +240,112 @@ def run_wizard():
     console.input("\n[dim]Press Enter to continue...[/dim]")
     
     return config_path if answers else None
+
+
+def create_experiment_non_interactive(name: str = None, description: str = "", 
+                                     train_dataset: str = None, test_dataset: str = None):
+    """
+    Create experiment configuration non-interactively (for CLI/scripts)
+    
+    Args:
+        name: Experiment name (default: experiment_<timestamp>)
+        description: Experiment description
+        train_dataset: Path to training dataset
+        test_dataset: Path to test dataset
+    
+    Returns:
+        dict: Experiment configuration
+    """
+    # Generate default name if not provided
+    if not name:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        name = f"experiment_{timestamp}"
+    
+    # Validate dataset paths
+    train_path = Path(train_dataset)
+    test_path = Path(test_dataset)
+    
+    if not train_path.exists():
+        raise FileNotFoundError(f"Training dataset not found: {train_dataset}")
+    if not test_path.exists():
+        raise FileNotFoundError(f"Test dataset not found: {test_dataset}")
+    
+    # Count images
+    train_images = list(train_path.glob("*/*.png"))
+    test_images = list(test_path.glob("*/*.png"))
+    
+    if len(train_images) == 0:
+        raise ValueError(f"No images found in training dataset: {train_dataset}")
+    if len(test_images) == 0:
+        raise ValueError(f"No images found in test dataset: {test_dataset}")
+    
+    # Create experiment structure
+    experiment_base = Path("experiments") / name
+    output_dirs = {
+        'models': experiment_base / "trained_models",
+        'results': experiment_base / "test_results",
+        'benchmarks': experiment_base / "benchmarks",
+        'logs': experiment_base / "logs"
+    }
+    
+    for dir_path in output_dirs.values():
+        dir_path.mkdir(parents=True, exist_ok=True)
+    
+    # Create experiment config
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    config = {
+        'experiment': {
+            'name': name,
+            'description': description,
+            'created_at': datetime.now().isoformat(),
+            'timestamp': timestamp
+        },
+        'datasets': {
+            'train': str(train_path),
+            'test': str(test_path),
+            'train_samples': len(train_images),
+            'test_samples': len(test_images)
+        },
+        'output_dirs': {
+            'base': str(experiment_base),
+            'models': str(output_dirs['models']),
+            'results': str(output_dirs['results']),
+            'benchmarks': str(output_dirs['benchmarks']),
+            'logs': str(output_dirs['logs'])
+        },
+        'configs': {
+            'projection_geometry': 'configs/projection_geometry.json',
+            'models': 'configs/models_config.json'
+        }
+    }
+    
+    # Save config
+    config_path = experiment_base / "experiment_config.yaml"
+    with open(config_path, 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    
+    # Save as current experiment
+    with open('.current_experiment', 'w') as f:
+        yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+    
+    # Update experiments index
+    experiments_dir = Path("experiments")
+    experiments_index = experiments_dir / "experiments_index.yaml"
+    
+    if experiments_index.exists():
+        with open(experiments_index) as f:
+            index = yaml.safe_load(f) or {'experiments': []}
+    else:
+        index = {'experiments': []}
+    
+    index['experiments'].append({
+        'name': name,
+        'description': description,
+        'created_at': datetime.now().isoformat(),
+        'config_path': str(config_path)
+    })
+    
+    with open(experiments_index, 'w') as f:
+        yaml.dump(index, f, default_flow_style=False, sort_keys=False)
+    
+    return config

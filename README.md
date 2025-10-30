@@ -8,7 +8,9 @@ A user-friendly command-line tool for training, testing, and benchmarking CT rec
 
 ```bash
 conda env create -f environment.yml
+conda activate tirocinio
 ```
+
 
 ### 2. Launch Interactive Mode (Recommended)
 
@@ -33,8 +35,7 @@ experiments/
     ├── trained_models/           # Your trained models
     ├── test_results/             # Test outputs
     ├── benchmarks/               # Benchmark results
-    ├── logs/                     # Training logs
-    └── checkpoints/              # Model checkpoints
+    └── logs/                     # Training logs
 ```
 
 ### 4. Start Training/Testing
@@ -46,9 +47,9 @@ Once you've created/selected an experiment:
 
 ## 📖 Usage Modes
 
-### Interactive Mode (Recommended) 🌟
+### Interactive Mode (Recommended for Beginners) 🌟
 
-The easiest way to use the tool with full experiment management:
+Guided step-by-step interface with full experiment management:
 
 ```bash
 python run.py interactive
@@ -57,14 +58,44 @@ python run.py interactive
 **Main Menu Features:**
 - 🔬 **Create/Select Experiment** - Manage multiple experiments
 - 🚀 **Train a new model** - Train preprocessing + postprocessing pipelines
-- 🧪 **Test an existing model** - Evaluate trained models
+- 🧪 **Test an existing model** - Evaluate trained models with visualization
 - 📊 **Benchmark multiple models** - Compare different combinations
-- ⚙️ **Configure settings** - Manage configurations
-- 📖 **View documentation** - Access help
 
-### Command-Line Mode (Advanced)
+### Command-Line Mode (For Automation & HPC) 🚀
 
-For automation and scripting (coming soon - currently use interactive mode).
+Direct commands for scripts, batch jobs, and SLURM:
+
+```bash
+# Create experiment
+python run.py create-experiment --name my_experiment --train-dataset "data/Mayo_s Dataset/train" --test-dataset "data/Mayo_s Dataset/test"
+
+# Train model
+python run.py train \
+  --experiment my_experiment \
+  --postprocessing UNet_V1 \
+  --epochs 50 \
+  --batch-size 8
+
+# Test with visualization
+python run.py test \
+  --experiment my_experiment \
+  --checkpoint FBP_UNet_V1.pth \
+  --visualize \
+  --num-samples 10
+
+# Benchmark multiple models
+python run.py benchmark \
+  --experiment my_experiment \
+  --postprocessing UNet_V1,ThreeL_SSNet
+```
+
+**Perfect for:**
+- 🖥️ **HPC clusters** (Open OnDemand, SLURM)
+- 📜 **Automated scripts** and pipelines
+- 🔄 **Batch processing** multiple experiments
+- 📊 **Hyperparameter sweeps**
+
+📖 **Full CLI documentation with examples**: [docs/CLI_USAGE.md](docs/CLI_USAGE.md)
 
 ## 🎯 Model Pipeline System
 
@@ -113,14 +144,14 @@ tirocinio/
 │       ├── trained_models/
 │       ├── test_results/
 │       ├── benchmarks/
-│       ├── logs/
-│       └── checkpoints/
+│       └── logs/
 ├── Mayo_s Dataset/              # Your CT dataset
 │   ├── train/
 │   └── test/
 ├── run.py                       # Quick launcher
 ├── requirements.txt             # Python dependencies
 └── docs/                        # Documentation
+    ├── CLI_USAGE.md             # CLI commands & HPC guide
     ├── MODEL_CONFIGURATION.md   # Model config system guide
     └── EXPERIMENTS_SYSTEM.md    # Experiments guide
 ```
@@ -133,7 +164,7 @@ tirocinio/
 4. **Use GPU** - Training is much faster with CUDA
 5. **Benchmark Combinations** - Test multiple preprocessing+postprocessing combinations at once
 6. **Edit JSON Configs** - Add new models without touching code (see `configs/models_config.json`)
-4. **Benchmark Regularly** - Compare models to find the best one
+7. **Automate on HPC** - Use CLI commands for SLURM jobs (see [docs/CLI_USAGE.md](docs/CLI_USAGE.md))
 
 ## 🔧 Configuration Files
 
@@ -234,27 +265,7 @@ Select: 📊 Benchmark multiple models
 Result: Comparison table showing both models' performance
 ```
 
-## 🐛 Troubleshooting
 
-### "No experiment selected. Create one first!"
-You need to create or select an experiment before training/testing.
-→ **Solution**: Select "🔬 Create/Select Experiment" from the main menu
-
-### "No trained models found"
-The current experiment has no trained models yet.
-→ **Solution**: Train a model first using "🚀 Train a new model"
-
-### "CUDA not available"
-The tool will automatically fall back to CPU, but training will be slower
-→ **Note**: Check GPU availability with `nvidia-smi` or `torch.cuda.is_available()`
-
-### "Import errors"
-Missing Python packages.
-→ **Solution**: Install dependencies: `pip install -r requirements.txt`
-
-### Checkpoint not found during benchmark
-The model combination hasn't been trained yet.
-→ **Solution**: Train the model first. Checkpoint format is `{preprocessing}_{postprocessing}.pth`
 
 ## ❓ FAQ
 
@@ -281,8 +292,10 @@ A: **Preprocessing** (FBP) reconstructs images from sinograms. **Post-processing
 
 ## 📚 Additional Documentation
 
+- **[CLI Usage Guide](docs/CLI_USAGE.md)** - Complete command-line reference for automation and HPC
 - **[Model Configuration Guide](docs/MODEL_CONFIGURATION.md)** - How to add/configure models
 - **[Experiments System Guide](docs/EXPERIMENTS_SYSTEM.md)** - Complete guide to the experiments system
+- **[projection_geometry_guide](docs/projection_geometry_guide.md)** - Guide for CT machine configuration
 
 ## 📝 License
 

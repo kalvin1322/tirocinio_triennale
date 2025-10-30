@@ -1,0 +1,19 @@
+experiment:
+  name: batch_experiment
+  description: ''
+  created_at: '2025-10-30T16:49:07.747161'
+  timestamp: '20251030_164907'
+datasets:
+  train: data\Mayo_s Dataset\train
+  test: data\Mayo_s Dataset\test
+  train_samples: 3306
+  test_samples: 327
+output_dirs:
+  base: experiments\batch_experiment
+  models: experiments\batch_experiment\trained_models
+  results: experiments\batch_experiment\test_results
+  benchmarks: experiments\batch_experiment\benchmarks
+  logs: experiments\batch_experiment\logs
+configs:
+  projection_geometry: configs/projection_geometry.json
+  models: configs/models_config.json
