@@ -11,30 +11,46 @@ from PIL import Image
 sys.path.append(str(Path(__file__).parent.parent))
 from utils.utilities import astra_projection
 from utils.geometry_config import load_projection_geometry
-from models.FBP_recostruction import run_fbp_reconstruction
+from utils.preprocessing_registry import get_preprocessing_method, list_preprocessing_methods
 
 
 class CTDataset(Dataset):
-    def __init__(self, image_path: str, filter_type: str = "ram-lak", 
-                 geometry_config: str = "default", shape: int = 512, use_cuda: bool = True):
+    def __init__(self, image_path: str, preprocessing_method: str = "FBP", 
+                 preprocessing_params: dict = None,
+                 geometry_config: str = "default", shape: int = 512):
         """
-        CT Dataset with configurable projection geometry
+        CT Dataset with configurable projection geometry and extensible preprocessing methods.
+        
+        Uses a registry pattern - new preprocessing methods can be added without modifying this class.
         
         Args:
             image_path: Path to image directory
-            filter_type: FBP filter type (ram-lak, shepp-logan, cosine, etc.)
+            preprocessing_method: Preprocessing algorithm name (e.g., "FBP", "SART")
+            preprocessing_params: Dictionary of parameters for the preprocessing method.
+                For FBP: {"filter_type": "ram-lak", "use_cuda": True}
+                For SART: {"iterations": 50, "projector_type": "linear"}
             geometry_config: Name of geometry config from JSON file (default: "default")
             shape: Image shape (assumes square images)
-            use_cuda: Whether to use CUDA for FBP reconstruction
+        
+        Example:
+            >>> # FBP with default parameters
+            >>> dataset = CTDataset("data/train", preprocessing_method="FBP")
+            >>> 
+            >>> # SART with custom iterations
+            >>> dataset = CTDataset("data/train", preprocessing_method="SART", 
+            ...                     preprocessing_params={"iterations": 100})
         """
         super().__init__()
         self.image_paths = sorted(list(Path(image_path).glob("*/*.png")))
-        self.filter_type = filter_type
-        self.use_cuda = use_cuda
+        self.preprocessing_method = preprocessing_method.upper()
+        self.preprocessing_params = preprocessing_params or {}
         self.geometry_name = geometry_config
         self.vol_geom = astra.create_vol_geom(shape, shape)
         self.proj_geom = load_projection_geometry(geometry_config)
         self.to_tensor = transforms.ToTensor()
+        
+        # Validate preprocessing method is registered
+        self.preprocessing_func = get_preprocessing_method(self.preprocessing_method)
     
     def __len__(self) -> int:
         return len(self.image_paths)
@@ -44,7 +60,7 @@ class CTDataset(Dataset):
         Get a single dataset item
         
         Returns:
-            tuple: (fbp_reconstruction_tensor, original_image_tensor)
+            tuple: (preprocessed_reconstruction_tensor, original_image_tensor)
         """
         # Load original image
         image_path = self.image_paths[idx]
@@ -58,18 +74,18 @@ class CTDataset(Dataset):
         sinogram_id = astra.data2d.create('-sino', self.proj_geom, data=sinogram)
         
         try:
-            # Perform FBP reconstruction using the dedicated function
-            reconstruction = run_fbp_reconstruction(
+            # Perform reconstruction using registered preprocessing method
+            # The preprocessing_func is retrieved from the registry during __init__
+            reconstruction = self.preprocessing_func(
                 vol_geom=self.vol_geom,
                 sinogram_id=sinogram_id,
-                filter_type=self.filter_type,
-                use_cuda=self.use_cuda
+                **self.preprocessing_params  # Pass all parameters dynamically
             )
 
-            fbp_image_tensor = self.to_tensor(reconstruction.astype(np.float32))
+            preprocessed_image_tensor = self.to_tensor(reconstruction.astype(np.float32))
             
         finally:
             # Clean up sinogram data
             astra.data2d.delete(sinogram_id)
         
-        return fbp_image_tensor, original_image_tensor
+        return preprocessed_image_tensor, original_image_tensor

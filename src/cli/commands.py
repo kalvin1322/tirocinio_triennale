@@ -6,6 +6,7 @@ from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.table import Table
+from datetime import datetime
 import sys
 
 # Add parent directory to path for imports
@@ -38,46 +39,35 @@ def get_model(model_name: str, **kwargs):
 
 def train_cmd(preprocessing: str, postprocessing: str, dataset: str, epochs: int, 
               batch_size: int, lr: float, output: str, geometry_config: str = "default",
-              num_encoders: int = None, start_middle_channels: int = None):
+              **model_params):
     """Train a post-processing model"""
+    from src.utils.model_params import build_model_params, validate_param, get_model_filename
+    
     console.print(f"\n[bold green]Starting Training[/bold green]")
     console.print(f"Preprocessing: {preprocessing}")
     console.print(f"Post-processing Model: {postprocessing}")
     console.print(f"Dataset: {dataset}")
     console.print(f"Epochs: {epochs}, Batch Size: {batch_size}, LR: {lr}")
     
-    if num_encoders is not None:
-        console.print(f"UNet Encoder Count: {num_encoders}")
-    if start_middle_channels is not None:
-        console.print(f"UNet Start Mid Channels: {start_middle_channels}")
+    # Build model parameters from config
+    params = build_model_params(postprocessing, **model_params)
+    
+    # Display custom parameters if any
+    if model_params:
+        console.print(f"Custom parameters: {model_params}")
+    
     console.print()
     
     # Setup device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     console.print(f"Using device: [cyan]{device}[/cyan]\n")
     
-    # Load model configuration
-    from src.utils.models_config import get_postprocessing_info
-    model_info = get_postprocessing_info(postprocessing)
-    
-    # Create model with custom parameters
-    if postprocessing == 'UNet_V1':
-        unet_params = {'in_channels': 1, 'out_channels': 1}
-        
-        if num_encoders is not None:
-            unet_params['num_encoders'] = num_encoders
-        if start_middle_channels is not None:
-            unet_params['start_middle_channels'] = start_middle_channels
-        
-        model_instance = UNet_V1(**unet_params)
-        console.print(f"[dim]UNet created with: num_encoders={unet_params.get('num_encoders', 3)}, "
-                     f"start_middle_channels={unet_params.get('start_middle_channels', 64)}[/dim]")
-    elif postprocessing == 'ThreeL_SSNet':
-        model_instance = ThreeL_SSNet()
-    else:
-        console.print(f"[red]Unknown model: {postprocessing}[/red]")
+    # Create model with parameters from config
+    model_instance = get_model(postprocessing, **params)
+    if model_instance is None:
         return
     
+    console.print(f"[dim]Model created with parameters: {params}[/dim]")
     model_instance.to(device)
     
     # Setup training
@@ -124,14 +114,11 @@ def train_cmd(preprocessing: str, postprocessing: str, dataset: str, epochs: int
     output_path = Path(output)
     output_path.mkdir(parents=True, exist_ok=True)
     
-    # Build model name with parameters if applicable
-    model_save_name = f"{preprocessing}_{postprocessing}"
-    if postprocessing == 'UNet_V1':
-        if num_encoders is not None or start_middle_channels is not None:
-            enc = num_encoders if num_encoders is not None else 3
-            channels = start_middle_channels if start_middle_channels is not None else 64
-            model_save_name = f"{preprocessing}_{postprocessing}_enc{enc}_ch{channels}"
+    # Build model filename with training parameters and model parameters
+    model_filename = get_model_filename(preprocessing, postprocessing, epochs=epochs, lr=lr, **params)
+    model_save_name = model_filename.replace('.pth', '')  # Remove extension for save_model
     
+    console.print(f"[dim]Saving model as: {model_filename}[/dim]")
     save_path = save_model(model_instance, model_save_name, output_path=str(output_path))
     
     console.print(f"\n[bold green]✓ Training completed![/bold green]")
@@ -248,65 +235,150 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
 
 def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: str, 
                  output: str, geometry_config: str = "default"):
-    """Benchmark multiple preprocessing-postprocessing combinations"""
-    from src.utils.models_config import get_model_combinations
+    """Benchmark multiple preprocessing-postprocessing combinations including parameter variants"""
+    import csv
+    import json
+    import re
     
     console.print(f"\n[bold magenta]Starting Benchmark[/bold magenta]")
     console.print(f"Preprocessing methods: {', '.join(preprocessing)}")
     console.print(f"Post-processing models: {', '.join(postprocessing)}")
     console.print(f"Dataset: {dataset}\n")
     
-    # Generate all combinations
-    combinations = get_model_combinations(preprocessing, postprocessing)
-    console.print(f"Testing {len(combinations)} combinations:\n")
+    # Find all trained models in the models directory
+    models_dir = Path(output).parent / "trained_models"
+    if not models_dir.exists():
+        console.print(f"[red]Models directory not found: {models_dir}[/red]")
+        return
+    
+    available_checkpoints = list(models_dir.glob("*.pth"))
+    
+    # Filter checkpoints based on requested preprocessing and postprocessing
+    matching_checkpoints = []
+    for checkpoint in available_checkpoints:
+        checkpoint_name = checkpoint.stem  # filename without .pth
+        
+        # Check if matches any requested preprocessing
+        for prep in preprocessing:
+            # Check if matches any requested postprocessing (including variants)
+            for postp in postprocessing:
+                # Match patterns like: FBP_UNet_V1, FBP_UNet_V1_enc4, FBP_UNet_V1_enc4_ch128
+                pattern = f"^{re.escape(prep)}_{re.escape(postp)}(_.*)?$"
+                if re.match(pattern, checkpoint_name):
+                    matching_checkpoints.append((prep, postp, checkpoint_name, checkpoint))
+                    break
+    
+    if not matching_checkpoints:
+        console.print(f"[yellow]No trained models found matching the criteria.[/yellow]")
+        console.print(f"[dim]Looking for: {preprocessing} → {postprocessing}[/dim]")
+        console.print(f"\n[cyan]Available models in {models_dir}:[/cyan]")
+        for cp in available_checkpoints:
+            console.print(f"  • {cp.name}")
+        return
+    
+    console.print(f"[green]Found {len(matching_checkpoints)} model(s) to benchmark:[/green]")
+    for prep, postp, checkpoint_name, _ in matching_checkpoints:
+        console.print(f"  • {checkpoint_name}")
+    console.print()
     
     results = []
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
-    for prep, postp in combinations:
-        console.print(f"\n[cyan]Evaluating: {prep} → {postp}...[/cyan]")
+    for prep, postp, checkpoint_name, checkpoint_path in matching_checkpoints:
+        console.print(f"\n[cyan]Evaluating: {checkpoint_name}...[/cyan]")
         
-        # Check if checkpoint exists
-        checkpoint_name = f"{prep}_{postp}.pth"
-        checkpoint_path = Path(output).parent / "trained_models" / checkpoint_name
-        
-        if not checkpoint_path.exists():
-            console.print(f"[yellow]⚠ Checkpoint not found: {checkpoint_path}[/yellow]")
-            console.print(f"[dim]Skipping this combination. Train the model first.[/dim]")
-            continue
-        
-        # Run test and collect metrics
+        # Load model and run test to collect metrics
         try:
-            test_cmd(postp, str(checkpoint_path), dataset, output)
+            # Load model
+            model_instance = get_model(postp)
+            if model_instance is None:
+                continue
+            
+            model_instance.load_state_dict(torch.load(checkpoint_path, map_location=device))
+            model_instance.to(device)
+            model_instance.eval()
+            
+            # Load test dataset
+            test_dataset = CTDataset(image_path=dataset, geometry_config=geometry_config)
+            test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+            
+            # Run test and collect metrics
+            loss_fn = torch.nn.L1Loss() if 'UNet' in postp else torch.nn.MSELoss()
+            metrics = test_step(model_instance, test_dataloader, loss_fn, device)
             
             results.append({
+                'model_full_name': checkpoint_name,  # Full model name with all parameters
                 'preprocessing': prep,
                 'postprocessing': postp,
-                'combination': f"{prep} → {postp}",
-                'checkpoint': checkpoint_name
+                'checkpoint': f"{checkpoint_name}.pth",
+                'psnr': metrics.get('psnr', 0.0),
+                'ssim': metrics.get('ssim', 0.0),
+                'mse': metrics.get('mse', 0.0),
+                'test_loss': metrics.get('loss', 0.0)  # test_step returns 'loss', not 'test_loss'
             })
+            
+            console.print(f"  [green]PSNR: {metrics.get('psnr', 0):.2f} dB | SSIM: {metrics.get('ssim', 0):.4f} | MSE: {metrics.get('mse', 0):.6f}[/green]")
+            
         except Exception as e:
             console.print(f"[red]Error testing {prep} → {postp}: {e}[/red]")
             continue
     
     # Display comparison table
     if results:
-        table = Table(title="Benchmark Results - All Combinations")
-        table.add_column("Preprocessing", style="cyan")
-        table.add_column("→", style="dim")
-        table.add_column("Post-processing", style="green")
-        table.add_column("Checkpoint", style="yellow")
+        table = Table(title="Benchmark Results - All Model Variants")
+        table.add_column("Model", style="cyan", no_wrap=True)
+        table.add_column("PSNR (dB)", style="yellow", justify="right")
+        table.add_column("SSIM", style="yellow", justify="right")
+        table.add_column("MSE", style="yellow", justify="right")
         
         for result in results:
+            # Show full model name with parameters
             table.add_row(
-                result['preprocessing'], 
-                "→",
-                result['postprocessing'],
-                result['checkpoint']
+                result['model_full_name'],
+                f"{result['psnr']:.2f}",
+                f"{result['ssim']:.4f}",
+                f"{result['mse']:.6f}"
             )
         
         console.print("\n")
         console.print(table)
+        
+        # Save results to CSV
+        output_path = Path(output)
+        output_path.mkdir(parents=True, exist_ok=True)
+        
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        csv_filename = output_path / f"benchmark_{timestamp}.csv"
+        json_filename = output_path / f"benchmark_{timestamp}.json"
+        
+        # Save CSV
+        with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
+            fieldnames = ['model_full_name', 'preprocessing', 'postprocessing', 'checkpoint', 'psnr', 'ssim', 'mse', 'test_loss']
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            writer.writeheader()
+            for result in results:
+                writer.writerow(result)
+        
+        # Save JSON (for more detailed analysis if needed)
+        benchmark_data = {
+            'timestamp': timestamp,
+            'date': datetime.now().isoformat(),
+            'preprocessing_methods': preprocessing,
+            'postprocessing_models': postprocessing,
+            'dataset': dataset,
+            'total_models_found': len(matching_checkpoints),
+            'successful_tests': len(results),
+            'results': results
+        }
+        
+        with open(json_filename, 'w', encoding='utf-8') as jsonfile:
+            json.dump(benchmark_data, jsonfile, indent=2)
+        
         console.print(f"\n[bold green]✓ Benchmark completed![/bold green]")
-        console.print(f"Tested {len(results)} out of {len(combinations)} combinations\n")
+        console.print(f"Successfully tested {len(results)} model(s)")
+        console.print(f"\n[cyan]Results saved to:[/cyan]")
+        console.print(f"  • CSV:  {csv_filename}")
+        console.print(f"  • JSON: {json_filename}\n")
     else:
         console.print("\n[yellow]No combinations could be tested. Please train models first.[/yellow]\n")

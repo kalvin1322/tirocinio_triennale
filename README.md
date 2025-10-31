@@ -183,6 +183,8 @@ output_dirs:
 
 ### Model Configuration (User-editable)
 
+#### Model Definitions (`models_config.json`)
+
 Edit `configs/models_config.json` to add new models:
 
 ```json
@@ -210,7 +212,58 @@ Edit `configs/models_config.json` to add new models:
     }
   }
 }
+```
 
+#### Model Parameters (`model_parameters.json`)
+
+Customize model hyperparameters in `configs/model_parameters.json`:
+
+```json
+{
+  "UNet_V1": {
+    "description": "U-Net architecture with customizable encoder-decoder pairs",
+    "default_params": {
+      "in_channels": 1,
+      "out_channels": 1,
+      "num_encoders": 3,
+      "start_middle_channels": 64
+    },
+    "tunable_params": {
+      "num_encoders": {
+        "type": "int",
+        "min": 2,
+        "max": 5,
+        "default": 3,
+        "description": "Number of encoder-decoder pairs"
+      },
+      "start_middle_channels": {
+        "type": "int",
+        "options": [32, 64, 128, 256],
+        "default": 64,
+        "description": "Starting number of middle channels"
+      }
+    }
+  }
+}
+```
+
+**Benefits:**
+- 🎯 Centralized parameter management
+- ✅ Automatic validation (min/max, allowed values)
+- 📝 Self-documenting configuration
+- 🔧 Easy to add new tunable parameters
+- 📛 Automatic model naming with parameters
+
+**Model Naming Examples:**
+```bash
+# Default parameters → FBP_UNet_V1.pth
+python run.py train --postprocessing UNet_V1
+
+# Custom encoders → FBP_UNet_V1_enc4.pth
+python run.py train --postprocessing UNet_V1 --num-encoders 4
+
+# Custom encoders + channels → FBP_UNet_V1_enc4_ch128.pth
+python run.py train --postprocessing UNet_V1 --num-encoders 4 --start-channels 128
 ```
 
 ## 📊 Example Workflow
@@ -285,7 +338,9 @@ A: **Preprocessing** (FBP) reconstructs images from sinograms. **Post-processing
 - **[CLI Usage Guide](docs/CLI_USAGE.md)** - Complete command-line reference for automation and HPC
 - **[Model Configuration Guide](docs/MODEL_CONFIGURATION.md)** - How to add/configure models
 - **[Experiments System Guide](docs/EXPERIMENTS_SYSTEM.md)** - Complete guide to the experiments system
-- **[projection_geometry_guide](docs/projection_geometry_guide.md)** - Guide for CT machine configuration
+- **[projection_geometry_guide](docs/projection_geometry_guide.md)** - Guide for CT machine configuratio
+- **[Adding Pre-processing method](docs/ADDING_PREPROCESSING_METHODS.md)** -  Guide to add pre-processing methods
+- **[Adding Custom Dataset](data/README.md)** - Guide to add custom dataset
 
 ## 📝 License
 

@@ -5,6 +5,20 @@
       "description": "Standard FBP reconstruction algorithm",
       "filters": ["ram-lak", "shepp-logan", "cosine", "hamming", "hann"],
       "default_filter": "ram-lak"
+    }, 
+    "SART": {
+      "name": "Simultaneous Algebraic Reconstruction Technique",
+      "description": "Iterative reconstruction using SART algorithm",
+      "default_iterations": 50,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 50,
+          "description": "Number of SART iterations"
+        }
+      }
     }
   },
   "postprocessing": {

@@ -218,6 +218,7 @@ def test_step(model: torch.nn.Module,
     """
 
     test_loss = 0
+    mse_total = 0
     ssim_metric = StructuralSimilarityIndexMeasure(data_range=1.0).to(device)
     psnr_metric = PeakSignalNoiseRatio(data_range=1.0).to(device)
     model.eval()
@@ -230,23 +231,28 @@ def test_step(model: torch.nn.Module,
             # 2. Calculate the loss
             test_loss += loss_fn(test_pred, y).item()
 
-            # 3. Calculate accuracy
+            # 3. Calculate MSE
+            mse_total += torch.nn.functional.mse_loss(test_pred, y).item()
+
+            # 4. Calculate metrics
             ssim_metric.update(test_pred, y)
             psnr_metric.update(test_pred, y)
         
         # Calculate the test loss average per batch
         test_loss /= len(data_loader)
+        mse_avg = mse_total / len(data_loader)
 
         # Calculate the test acc average per batch
         final_ssim = ssim_metric.compute()
         final_psnr = psnr_metric.compute()
         # Print out what's happening
-        print(f"\nTest loss: {test_loss:.4f} | Test SSIM: {final_ssim:.4f} | Test PSNR: {final_psnr:.2f} dB \n")
+        print(f"\nTest loss: {test_loss:.4f} | Test SSIM: {final_ssim:.4f} | Test PSNR: {final_psnr:.2f} dB | Test MSE: {mse_avg:.6f}\n")
         
         # Return metrics as dictionary
         return {
             'loss': float(test_loss),
             'ssim': float(final_ssim.cpu()),
-            'psnr': float(final_psnr.cpu())
+            'psnr': float(final_psnr.cpu()),
+            'mse': float(mse_avg)
         }
     

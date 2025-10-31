@@ -1,0 +1,34 @@
+{
+  "UNet_V1": {
+    "description": "U-Net architecture with customizable encoder-decoder pairs",
+    "default_params": {
+      "in_channels": 1,
+      "out_channels": 1,
+      "num_encoders": 3,
+      "start_middle_channels": 64
+    },
+    "tunable_params": {
+      "num_encoders": {
+        "type": "int",
+        "min": 2,
+        "max": 5,
+        "default": 3,
+        "description": "Number of encoder-decoder pairs"
+      },
+      "start_middle_channels": {
+        "type": "int",
+        "options": [32, 64, 128, 256],
+        "default": 64,
+        "description": "Starting number of middle channels (doubles each level)"
+      }
+    }
+  },
+  "ThreeL_SSNet": {
+    "description": "Three-Level Squeeze-and-Excitation Network",
+    "default_params": {
+      "in_channels": 1,
+      "out_channels": 1
+    },
+    "tunable_params": {}
+  }
+}

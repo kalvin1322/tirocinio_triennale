@@ -58,6 +58,8 @@ def experiment_interactive():
         console.print()
         choices.append(('📂 Select existing experiment', 'select'))
     
+    choices.append(('← Back to Main Menu', 'back'))
+    
     questions = [
         inquirer.List(
             'action',
@@ -67,6 +69,9 @@ def experiment_interactive():
     ]
     
     answers = inquirer.prompt(questions)
+    
+    if not answers or answers.get('action') == 'back':
+        return None
     
     if answers['action'] == 'new':
         from .wizard import run_wizard
@@ -80,6 +85,7 @@ def experiment_interactive():
         # Show list of experiments to select
         exp_choices = [(f"{exp['name']} - {exp.get('description', '')}", exp) 
                        for exp in existing_experiments]
+        exp_choices.append(('← Back', 'BACK'))
         
         select_questions = [
             inquirer.List(
@@ -90,7 +96,7 @@ def experiment_interactive():
         ]
         
         select_answers = inquirer.prompt(select_questions)
-        if select_answers:
+        if select_answers and select_answers['experiment'] != 'BACK':
             exp = select_answers['experiment']
             config_path = Path(exp['config_path'])
             with open(config_path, 'r') as f:
@@ -184,12 +190,18 @@ def train_interactive(experiment_config):
     import sys
     from pathlib import Path
     sys.path.append(str(Path(__file__).parent.parent))
-    from utils.models_config import get_preprocessing_models, get_postprocessing_models, get_postprocessing_info
+    from utils.models_config import get_preprocessing_models, get_postprocessing_models, get_preprocessing_info, get_postprocessing_info
     
     preprocessing_models = get_preprocessing_models()
     postprocessing_models = get_postprocessing_models()
     
-    # Create choices with descriptions
+    # Create choices with descriptions for preprocessing
+    prep_choices = []
+    for model in preprocessing_models:
+        info = get_preprocessing_info(model)
+        prep_choices.append((f"{model} - {info['name']}", model))
+    
+    # Create choices with descriptions for postprocessing
     postp_choices = []
     for model in postprocessing_models:
         info = get_postprocessing_info(model)
@@ -205,18 +217,18 @@ def train_interactive(experiment_config):
         inquirer.List(
             'preprocessing',
             message="Select preprocessing method",
-            choices=[(f"FBP (Filtered Back Projection)", prep) for prep in preprocessing_models],
+            choices=prep_choices,
         ),
         inquirer.List(
             'postprocessing',
             message="Select post-processing model to train",
-            choices=postp_choices,
+            choices=postp_choices + [('← Back to Main Menu', 'BACK')],
         ),
     ]
     
     initial_answers = inquirer.prompt(initial_questions)
     
-    if not initial_answers:
+    if not initial_answers or initial_answers.get('postprocessing') == 'BACK':
         return
     
     # Build the rest of the questions
@@ -380,17 +392,24 @@ def test_interactive(experiment_config):
         inquirer.List(
             'checkpoint',
             message="Select model checkpoint",
-            choices=model_choices,
+            choices=model_choices + [('← Back to Main Menu', 'BACK')],
         ),
+        
+    ]
+    
+    answers = inquirer.prompt(questions)
+    # Check if user wants to go back
+    if not answers or answers.get('checkpoint') == 'BACK':
+        return
+    
+    questions = [
         inquirer.Confirm(
             'visualize',
             message="Generate visualization plots?",
             default=True
         ),
     ]
-    
     answers = inquirer.prompt(questions)
-    
     # If visualization is enabled, ask how many samples
     if answers and answers['visualize']:
         num_samples_q = [
@@ -461,6 +480,22 @@ def benchmark_interactive(experiment_config):
     console.print(f"  Test: [dim]{experiment_config['datasets']['test']}[/dim]")
     console.print(f"  ({experiment_config['datasets']['test_samples']} images)\n")
     
+    # First ask if user wants to continue
+    continue_question = [
+        inquirer.List(
+            'continue',
+            message="Proceed with benchmark setup?",
+            choices=[
+                ('✓ Yes, configure benchmark', 'yes'),
+                ('← Back to Main Menu', 'back')
+            ]
+        )
+    ]
+    
+    continue_answer = inquirer.prompt(continue_question)
+    if not continue_answer or continue_answer.get('continue') == 'back':
+        return
+    
     questions = [
         inquirer.Checkbox(
             'preprocessing',
@@ -491,20 +526,46 @@ def benchmark_interactive(experiment_config):
             console.input("\n[dim]Press Enter to continue...[/dim]")
             return
         
-        # Generate all combinations
-        combinations = get_model_combinations(prep_models, postp_models)
-        
         # Show summary
         console.print(f"\n[cyan]Benchmark Configuration:[/cyan]")
         console.print(f"  Preprocessing: {', '.join(prep_models)}")
         console.print(f"  Post-processing: {', '.join(postp_models)}")
-        console.print(f"  Total combinations: {len(combinations)}")
-        console.print(f"\n[dim]Combinations to test:[/dim]")
-        for prep, postp in combinations:
-            console.print(f"  • {prep} → {postp}")
+        
+        # Find actual trained models to show what will be tested
+        import re
+        from pathlib import Path
+        models_dir = Path(experiment_config['output_dirs']['models'])
+        
+        if models_dir.exists():
+            available_checkpoints = list(models_dir.glob("*.pth"))
+            matching_models = []
+            
+            for checkpoint in available_checkpoints:
+                checkpoint_name = checkpoint.stem
+                for prep in prep_models:
+                    for postp in postp_models:
+                        pattern = f"^{re.escape(prep)}_{re.escape(postp)}(_.*)?$"
+                        if re.match(pattern, checkpoint_name):
+                            matching_models.append(checkpoint_name)
+                            break
+            
+            if matching_models:
+                console.print(f"\n[green]Found {len(matching_models)} trained model(s) to benchmark:[/green]")
+                for model in matching_models:
+                    console.print(f"  • {model}")
+            else:
+                console.print(f"\n[yellow]No trained models found matching the selected criteria.[/yellow]")
+                console.print(f"[dim]Please train models first.[/dim]")
+                console.input("\n[dim]Press Enter to continue...[/dim]")
+                return
+        else:
+            console.print(f"\n[yellow]Trained models directory not found.[/yellow]")
+            console.input("\n[dim]Press Enter to continue...[/dim]")
+            return
+        
         console.print()
         
-        if inquirer.confirm(f"Run benchmark with {len(combinations)} combinations?", default=True):
+        if inquirer.confirm(f"Run benchmark with these {len(matching_models)} model(s)?", default=True):
             from .commands import benchmark_cmd
             # Use test dataset from experiment config
             test_dataset = experiment_config['datasets']['test']

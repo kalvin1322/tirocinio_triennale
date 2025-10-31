@@ -111,19 +111,26 @@ python run.py train --postprocessing UNet_V1 --epochs 50 --batch-size 8 --learni
 ```bash
 # Basic training with defaults
 python run.py train --postprocessing UNet_V1 --epochs 50
+# Output: FBP_UNet_V1_ep50_lr0001.pth
 
 # Custom UNet architecture
 python run.py train --postprocessing UNet_V1 --num-encoders 4 --start-channels 128 --epochs 100
+# Output: FBP_UNet_V1_enc4_ch128_ep100_lr0001.pth
 
 # Train SSNet with specific experiment
 python run.py train --experiment experiment_20251030_120000 --postprocessing ThreeL_SSNet --epochs 75 --learning-rate 0.00005
+# Output: FBP_ThreeL_SSNet_ep75_lr00005.pth
 
 # High batch size training
 python run.py train --postprocessing UNet_V1 --epochs 50 --batch-size 16 --learning-rate 0.0001
+# Output: FBP_UNet_V1_ep50_lr00001.pth
 ```
 
 **Output:**
 - Model saved to `experiments/<name>/trained_models/<model_name>.pth`
+- **Filename format**: `<prep>_<postp>[_<arch_params>]_ep<epochs>_lr<learning_rate>.pth`
+  - Architecture params (e.g., `enc4_ch128`) only if different from defaults
+  - Training params (epochs, lr) **always included**
 - Training config saved to `experiments/<name>/logs/`
 
 ---
@@ -146,13 +153,13 @@ python run.py test --checkpoint FBP_UNet_V1.pth --visualize --num-samples 10
 
 ```bash
 # Basic test without visualization
-python run.py test --checkpoint FBP_UNet_V1.pth
+python run.py test --checkpoint FBP_UNet_V1_ep50_lr0001.pth
 
 # Test with visualization
-python run.py test --checkpoint FBP_ThreeL_SSNet.pth --visualize --num-samples 20
+python run.py test --checkpoint FBP_ThreeL_SSNet_ep75_lr00005.pth --visualize --num-samples 20
 
-# Test specific experiment
-python run.py test --experiment my_old_experiment --checkpoint FBP_UNet_V1_enc4_ch128.pth --visualize
+# Test specific experiment with custom architecture
+python run.py test --experiment my_old_experiment --checkpoint FBP_UNet_V1_enc4_ch128_ep100_lr0001.pth --visualize
 ```
 
 **Output:**
@@ -163,33 +170,59 @@ python run.py test --experiment my_old_experiment --checkpoint FBP_UNet_V1_enc4_
 
 ### 4. Benchmark Models
 
-Compare multiple models side-by-side:
+Compare multiple models side-by-side, **including all parameter variants**:
 
 ```bash
 python run.py benchmark --postprocessing UNet_V1,ThreeL_SSNet
 ```
 
+**🎯 Important**: This command automatically benchmarks **ALL variants** of the specified models found in your `trained_models` folder. 
+
+For example, if you have trained:
+- `FBP_UNet_V1_ep50_lr0001.pth` (default architecture, 50 epochs)
+- `FBP_UNet_V1_ep100_lr0001.pth` (default architecture, 100 epochs)
+- `FBP_UNet_V1_enc4_ch128_ep50_lr00001.pth` (custom architecture + training)
+
+**All three** will be benchmarked when you specify `--postprocessing UNet_V1`.
+
 **Options:**
-- `--postprocessing` / `-post`: Comma-separated list of models to compare [required]
+- `--postprocessing` / `-post`: Comma-separated list of model types to compare [required]
 - `--preprocessing` / `-pre`: Preprocessing method (default: FBP)
 - `--experiment` / `-e`: Use specific experiment (default: current)
 
 **Examples:**
 
 ```bash
-# Compare two models
+# Benchmark all UNet and SSNet variants
 python run.py benchmark --postprocessing UNet_V1,ThreeL_SSNet
 
-# Benchmark with specific experiment
-python run.py benchmark --experiment my_experiment --postprocessing UNet_V1,ThreeL_SSNet
+# Will automatically find and test ALL trained variants:
+#   ✓ FBP_UNet_V1_ep50_lr0001.pth
+#   ✓ FBP_UNet_V1_ep100_lr0001.pth
+#   ✓ FBP_UNet_V1_enc4_ch128_ep50_lr00001.pth  
+#   ✓ FBP_ThreeL_SSNet_ep75_lr00005.pth
 
-# Compare three models
-python run.py benchmark --postprocessing UNet_V1,ThreeL_SSNet,CustomModel
+# Benchmark specific experiment
+python run.py benchmark --experiment my_experiment --postprocessing UNet_V1
 ```
 
 **Output:**
-- Benchmark table: `experiments/<name>/benchmarks/benchmark_<timestamp>.txt`
-- Results comparison with metrics (PSNR, SSIM, MSE)
+- **CSV file**: `experiments/<name>/benchmarks/benchmark_<timestamp>.csv`
+  ```csv
+  model_full_name,preprocessing,postprocessing,checkpoint,psnr,ssim,mse,test_loss
+  FBP_UNet_V1_ep50_lr0001,FBP,UNet_V1,FBP_UNet_V1_ep50_lr0001.pth,32.45,0.9234,0.000123,0.045
+  FBP_UNet_V1_enc4_ch128_ep50_lr00001,FBP,UNet_V1,FBP_UNet_V1_enc4_ch128_ep50_lr00001.pth,33.12,0.9301,0.000115,0.042
+  FBP_ThreeL_SSNet_ep75_lr00005,FBP,ThreeL_SSNet,FBP_ThreeL_SSNet_ep75_lr00005.pth,31.89,0.9156,0.000145,0.052
+  ```
+  - Shows full model name with parameters in first column
+  - Easy to open in Excel/Google Sheets for comparison
+  - Compatible with pandas: `pd.read_csv('benchmark.csv')`
+  
+- **JSON file**: `experiments/<name>/benchmarks/benchmark_<timestamp>.json`
+  - Complete metadata and results
+  - Includes timestamp, dataset info, and all metrics
+  
+- **Console table**: Real-time results displayed during execution
 
 ---
 
