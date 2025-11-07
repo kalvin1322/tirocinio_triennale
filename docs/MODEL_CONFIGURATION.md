@@ -235,7 +235,7 @@ tirocinio/
 - **`model_parameters.json`** - Add model configuration
 
 ### Testing Your Addition
-If you want to test youre addition run in a custom python file this script, you should see the model that you've added:
+If you want to test your addition run in a custom python file this script, you should see the model that you've added:
 ```python
 # Check if registered
 from src.utils.preprocessing_registry import list_preprocessing_methods
