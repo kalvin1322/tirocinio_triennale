@@ -71,31 +71,3 @@ def get_postprocessing_info(model_name: str, config_path: str = "configs/models_
     return postprocessing[model_name]
 
 
-def get_model_combinations(preprocessing_models: Optional[List[str]] = None,
-                          postprocessing_models: Optional[List[str]] = None,
-                          config_path: str = "configs/models_config.json") -> List[tuple]:
-    """
-    Generate all combinations of preprocessing and postprocessing models
-    
-    Args:
-        preprocessing_models: List of preprocessing model names (None = all)
-        postprocessing_models: List of postprocessing model names (None = all)
-        config_path: Path to config file
-        
-    Returns:
-        List of tuples (preprocessing_name, postprocessing_name)
-    """
-    config = load_models_config(config_path)
-    
-    if preprocessing_models is None:
-        preprocessing_models = list(config.get('preprocessing', {}).keys())
-    
-    if postprocessing_models is None:
-        postprocessing_models = list(config.get('postprocessing', {}).keys())
-    
-    combinations = []
-    for prep in preprocessing_models:
-        for postp in postprocessing_models:
-            combinations.append((prep, postp))
-    
-    return combinations

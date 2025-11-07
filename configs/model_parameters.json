@@ -30,5 +30,27 @@
       "out_channels": 1
     },
     "tunable_params": {}
+  },
+  "SimpleResNet":{
+    "description": "A simple residual network (FCN) for post-processing",
+    "default_params": {
+      "in_channels": 1,
+      "out_channels": 1
+    },
+    "tunable_params": {
+      "num_layers": {
+        "type": "int",
+        "min": 2,
+        "max": 10,
+        "default": 4,
+        "description": "Number of residual layers in the network"
+      },
+      "features": {
+        "type": "int",
+        "options": [16, 32, 64, 128],
+        "default": 32,
+        "description": "Number of features in each convolutional layer"
+      }
+    }
   }
 }

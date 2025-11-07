@@ -1,13 +1,23 @@
 """
 Interactive mode with guided menus for CT Reconstruction Training
 """
+import sys
+import re
 import inquirer
+import yaml
+from pathlib import Path
+from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from pathlib import Path
-import yaml
-from datetime import datetime
+
+# Add parent directory to path for imports
+sys.path.append(str(Path(__file__).parent.parent))
+from utils.models_config import (get_preprocessing_models, get_postprocessing_models, 
+                                 get_preprocessing_info, get_postprocessing_info)
+from utils.model_params import get_tunable_params, get_default_params
+from .wizard import run_wizard
+from .commands import test_cmd
 
 console = Console()
 
@@ -74,7 +84,6 @@ def experiment_interactive():
         return None
     
     if answers['action'] == 'new':
-        from .wizard import run_wizard
         config_path = run_wizard()
         if config_path:
             with open(config_path, 'r') as f:
@@ -139,8 +148,8 @@ def run_interactive_mode():
                     ('🚀 Train a new model', 'train'),
                     ('🧪 Test an existing model', 'test'),
                     ('📊 Benchmark multiple models', 'benchmark'),
-                    ('⚙️  Configure settings', 'config'),
-                    ('📖 View documentation', 'docs'),
+                    #('⚙️  Configure settings', 'config'),
+                    #('📖 View documentation', 'docs'),
                     ('❌ Exit', 'exit')
                 ],
             ),
@@ -187,11 +196,6 @@ def train_interactive(experiment_config):
     ))
     
     # Load available models from config
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).parent.parent))
-    from utils.models_config import get_preprocessing_models, get_postprocessing_models, get_preprocessing_info, get_postprocessing_info
-    
     preprocessing_models = get_preprocessing_models()
     postprocessing_models = get_postprocessing_models()
     
@@ -234,23 +238,41 @@ def train_interactive(experiment_config):
     # Build the rest of the questions
     questions = []
     
-    # Add UNet-specific parameters if UNet is selected
-    if 'UNet' in initial_answers['postprocessing']:
-        console.print("\n[cyan]UNet Architecture Configuration:[/cyan]")
-        questions.extend([
-            inquirer.Text(
-                'num_encoders',
-                message="Number of encoder-decoder blocks",
-                default="3",
-                validate=lambda _, x: x.isdigit() and 1 <= int(x) <= 5
-            ),
-            inquirer.Text(
-                'start_middle_channels',
-                message="Starting middle channels",
-                default="64",
-                validate=lambda _, x: x.isdigit() and int(x) > 0
-            ),
-        ])
+    # Add model-specific tunable parameters dynamically
+    selected_model = initial_answers['postprocessing']
+    tunable_params = get_tunable_params(selected_model)
+    if tunable_params:
+        console.print(f"\n[cyan]{selected_model} Architecture Configuration:[/cyan]")
+        
+        for param_name, param_config in tunable_params.items():
+            default_value = str(param_config.get('default', ''))
+            description = param_config.get('description', param_name)
+            
+            # Create validation function based on param type
+            if param_config['type'] == 'int':
+                if 'options' in param_config:
+                    # Multiple choice for options
+                    choices = [(str(opt), str(opt)) for opt in param_config['options']]
+                    questions.append(
+                        inquirer.List(
+                            param_name,
+                            message=description,
+                            choices=choices,
+                            default=default_value
+                        )
+                    )
+                else:
+                    # Range input with min/max validation
+                    min_val = param_config.get('min', 1)
+                    max_val = param_config.get('max', 100)
+                    questions.append(
+                        inquirer.Text(
+                            param_name,
+                            message=f"{description} ({min_val}-{max_val})",
+                            default=default_value,
+                            validate=lambda _, x, min_v=min_val, max_v=max_val: x.isdigit() and min_v <= int(x) <= max_v
+                        )
+                    )
     
     # Add common training parameters
     questions.extend([
@@ -402,14 +424,19 @@ def test_interactive(experiment_config):
     if not answers or answers.get('checkpoint') == 'BACK':
         return
     
-    questions = [
+    # Ask for visualization options
+    viz_questions = [
         inquirer.Confirm(
             'visualize',
             message="Generate visualization plots?",
             default=True
         ),
     ]
-    answers = inquirer.prompt(questions)
+    viz_answers = inquirer.prompt(viz_questions)
+    
+    # Merge the answers
+    if viz_answers:
+        answers.update(viz_answers)
     # If visualization is enabled, ask how many samples
     if answers and answers['visualize']:
         num_samples_q = [
@@ -425,9 +452,19 @@ def test_interactive(experiment_config):
         num_samples = 0
     
     if answers and inquirer.confirm("Start testing?", default=True):
-        from .commands import test_cmd
         # Extract model name from checkpoint path
-        model_name = Path(answers['checkpoint']).stem
+        checkpoint_name = Path(answers['checkpoint']).stem
+        
+        # Extract base model name (without parameters)
+        # Example: SIRT_SimpleResNet_ep3_lr10000 -> SimpleResNet
+        parts = checkpoint_name.split('_')
+        # Find the postprocessing model name (after preprocessing, before _ep or _ch, etc.)
+        if len(parts) >= 2:
+            # Skip preprocessing (first part), get model name
+            model_name = parts[1]
+        else:
+            model_name = checkpoint_name
+        
         # Use test dataset from experiment config
         test_dataset = experiment_config['datasets']['test']
         test_cmd(
@@ -436,7 +473,7 @@ def test_interactive(experiment_config):
             dataset=test_dataset,
             output=experiment_config['output_dirs']['results'],
             experiment_name=experiment_config['experiment']['name'],
-            visualize=answers['visualize'],
+            visualize=answers.get('visualize', False),
             num_samples=num_samples
         )
         
@@ -453,13 +490,6 @@ def benchmark_interactive(experiment_config):
     ))
     
     # Load model configurations
-    import sys
-    from pathlib import Path
-    sys.path.append(str(Path(__file__).parent.parent))
-    from utils.models_config import (get_preprocessing_models, get_postprocessing_models, 
-                                     get_preprocessing_info, get_postprocessing_info,
-                                     get_model_combinations)
-    
     preprocessing_models = get_preprocessing_models()
     postprocessing_models = get_postprocessing_models()
     
@@ -532,8 +562,6 @@ def benchmark_interactive(experiment_config):
         console.print(f"  Post-processing: {', '.join(postp_models)}")
         
         # Find actual trained models to show what will be tested
-        import re
-        from pathlib import Path
         models_dir = Path(experiment_config['output_dirs']['models'])
         
         if models_dir.exists():

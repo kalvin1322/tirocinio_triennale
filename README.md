@@ -87,23 +87,6 @@ python run.py benchmark --experiment my_experiment --postprocessing UNet_V1,Thre
 
 📖 **Full CLI documentation with examples**: [CLI_USAGE.md](docs/CLI_USAGE.md)
 
-## 🎯 Model Pipeline System
-
-The tool uses a **preprocessing + postprocessing** pipeline:
-
-### Preprocessing Methods
-- **FBP** (Filtered Back Projection) - Analytical CT reconstruction
-
-### Post-processing Models
-- **UNet_V1** - U-Net architecture for image enhancement
-- **ThreeL_SSNet** - Three-Level Similarity Structure Network
-
-### Model Combinations
-Train and test combinations like:
-- `FBP → UNet_V1`
-- `FBP → ThreeL_SSNet`
-
-**Configuration**: Edit `configs/models_config.json` to add new models (no code changes needed!)
 
 ## 📁 Project Structure
 
@@ -154,7 +137,6 @@ tirocinio/
 4. **Use GPU** - Training is much faster with CUDA
 5. **Benchmark Combinations** - Test multiple preprocessing+postprocessing combinations at once
 6. **Edit JSON Configs** - Add new models without touching code (see `configs/models_config.json`)
-7. **Automate on HPC** - Use CLI commands for SLURM jobs (see [docs/CLI_USAGE.md](docs/CLI_USAGE.md))
 
 ## 🔧 Configuration Files
 
@@ -216,7 +198,7 @@ Edit `configs/models_config.json` to add new models:
 
 #### Model Parameters (`model_parameters.json`)
 
-Customize model hyperparameters in `configs/model_parameters.json`:
+Customize **postprocessing model** hyperparameters in `configs/model_parameters.json`:
 
 ```json
 {
@@ -254,84 +236,23 @@ Customize model hyperparameters in `configs/model_parameters.json`:
 - 🔧 Easy to add new tunable parameters
 - 📛 Automatic model naming with parameters
 
-**Model Naming Examples:**
+**Postprocessing Model Examples (CLI configurable):**
 ```bash
-# Default parameters → FBP_UNet_V1.pth
-python run.py train --postprocessing UNet_V1
+# Default parameters
+python run.py train --postprocessing UNet_V1 --epochs 50
+# Output: FBP_UNet_V1_ep50_lr0001.pth
 
-# Custom encoders → FBP_UNet_V1_enc4.pth
-python run.py train --postprocessing UNet_V1 --num-encoders 4
-
-# Custom encoders + channels → FBP_UNet_V1_enc4_ch128.pth
+# Custom UNet architecture
 python run.py train --postprocessing UNet_V1 --num-encoders 4 --start-channels 128
+# Output: FBP_UNet_V1_ep50_lr0001.pth
+
+# Custom SimpleResNet
+python run.py train --postprocessing SimpleResNet --num-layers 3 --features 16
+# Output: FBP_SimpleResNet_ep50_lr0001.pth
 ```
 
-## 📊 Example Workflow
-
-### Complete Experiment Flow
-
-```bash
-# 1. Launch tool
-python run.py interactive
-
-# 2. Create experiment
-Select: 🔬 Create/Select Experiment
-  → ➕ Create new experiment
-  → Name: "unet_vs_threelssnet"
-  → Description: "Comparing two post-processing models"
-  → Confirm dataset paths
-
-# 3. Train first model (FBP → UNet_V1)
-Select: 🚀 Train a new model
-  → Preprocessing: FBP
-  → Post-processing: UNet_V1
-  → Epochs: 50
-  → Start training
-  
-Result: experiments/unet_vs_threelssnet/trained_models/FBP_UNet_V1.pth
-
-# 4. Train second model (FBP → ThreeL_SSNet)
-Select: 🚀 Train a new model
-  → Preprocessing: FBP
-  → Post-processing: ThreeL_SSNet
-  → Epochs: 50
-  → Start training
-  
-Result: experiments/unet_vs_threelssnet/trained_models/FBP_ThreeL_SSNet.pth
-
-# 5. Benchmark both models
-Select: 📊 Benchmark multiple models
-  → Preprocessing: [✓] FBP
-  → Post-processing: [✓] UNet_V1, [✓] ThreeL_SSNet
-  → Run benchmark
-
-Result: Comparison table showing both models' performance
-```
-
-
-
-## ❓ FAQ
-
-**Q: Do I need to run the wizard every time?**
-A: No! The wizard creates experiments. You can switch between experiments without recreating them.
-
-**Q: Can I have multiple experiments?**
-A: Yes! That's the main feature. Create different experiments for different tests/configurations.
-
-**Q: Where are my trained models saved?**
-A: In `experiments/{your_experiment_name}/trained_models/`
-
-**Q: How do I switch between experiments?**
-A: Use "🔬 Create/Select Experiment" → "📂 Select existing experiment"
-
-**Q: Can I delete old experiments?**
-A: Yes, just delete the folder in `experiments/`. They're independent.
-
-**Q: How do I add a new model?**
-A: Edit `configs/models_config.json` and add the model class in `src/models/`. See `docs/MODEL_CONFIGURATION.md` for details.
-
-**Q: What's the difference between preprocessing and post-processing?**
-A: **Preprocessing** (FBP) reconstructs images from sinograms. **Post-processing** (UNet, ThreeL_SSNet) enhances the reconstructed images.
+⚠️ **Important**: **Preprocessing parameters** (e.g., SART/SIRT iterations) are **NOT configurable via CLI**.  
+They must be set in `configs/models_config.json` before training. See [Model Configuration Guide](docs/MODEL_CONFIGURATION.md) for details.
 
 ## 📚 Additional Documentation
 
@@ -342,10 +263,3 @@ A: **Preprocessing** (FBP) reconstructs images from sinograms. **Post-processing
 - **[Adding Pre-processing method](docs/ADDING_PREPROCESSING_METHODS.md)** -  Guide to add pre-processing methods
 - **[Adding Custom Dataset](data/README.md)** - Guide to add custom dataset
 
-## 📝 License
-
-This project is part of the tirocinio_triennale repository.
-
-## 🤝 Contributing
-
-Feel free to open issues or submit pull requests!

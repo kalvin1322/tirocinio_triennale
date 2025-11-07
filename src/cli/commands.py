@@ -2,46 +2,44 @@
 Command implementations for training, testing, and benchmarking
 """
 import torch
+import sys
+import csv
+import json
+import re
+import numpy as np
 from pathlib import Path
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeElapsedColumn
 from rich.table import Table
 from datetime import datetime
-import sys
+from torch.utils.data import DataLoader
 
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.models.UNet_V1 import UNet_V1
-from src.models.ThreeL_SSNet import ThreeL_SSNet
 from src.utils.train_test import train_step, test_step, save_model, save_test_results, save_visualization_plots
 from src.dataloader.CTDataloader import CTDataset
-from torch.utils.data import DataLoader
 from src.utils.utilities import astra_projection
+from src.utils.postprocessing_registry import get_postprocessing_model, list_postprocessing_models
+from src.utils.model_params import build_model_params, validate_param, get_model_filename
 
 console = Console()
 
 
 def get_model(model_name: str, **kwargs):
-    """Get model instance by name"""
-    models = {
-        'UNet_V1': UNet_V1,
-        'ThreeL_SSNet': ThreeL_SSNet,
-    }
+    """Get model instance by name using registry"""
     
-    if model_name not in models:
-        console.print(f"[red]Error: Unknown model '{model_name}'[/red]")
-        console.print(f"Available models: {', '.join(models.keys())}")
+    try:
+        return get_postprocessing_model(model_name, **kwargs)
+    except ValueError as e:
+        console.print(f"[red]Error: {e}[/red]")
         return None
-    
-    return models[model_name](**kwargs)
 
 
 def train_cmd(preprocessing: str, postprocessing: str, dataset: str, epochs: int, 
               batch_size: int, lr: float, output: str, geometry_config: str = "default",
               **model_params):
     """Train a post-processing model"""
-    from src.utils.model_params import build_model_params, validate_param, get_model_filename
     
     console.print(f"\n[bold green]Starting Training[/bold green]")
     console.print(f"Preprocessing: {preprocessing}")
@@ -143,16 +141,13 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     console.print(f"Using device: [cyan]{device}[/cyan]\n")
     
-    # Load model
-    if 'UNet' in model:
-        model_instance = UNet_V1(in_channels=1, out_channels=1)
-        loss_fn = torch.nn.L1Loss()
-    elif 'ThreeL_SSNet' in model:
-        model_instance = ThreeL_SSNet()
-        loss_fn = torch.nn.MSELoss()
-    else:
-        console.print(f"[red]Unknown model: {model}[/red]")
+    # Load model using registry
+    model_instance = get_model(model, in_channels=1, out_channels=1)
+    if model_instance is None:
         return
+    
+    # Set loss function based on model type
+    loss_fn = torch.nn.L1Loss() if 'UNet' in model else torch.nn.MSELoss()
     
     # Load checkpoint
     try:
@@ -198,7 +193,6 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
     # Generate visualization plots if requested
     if visualize:
         console.print(f"\n[cyan]Generating visualization plots for {num_samples} samples...[/cyan]")
-        import numpy as np
         
         # Get a few samples from the dataset for visualization
         model_instance.eval()
@@ -236,10 +230,6 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
 def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: str, 
                  output: str, geometry_config: str = "default"):
     """Benchmark multiple preprocessing-postprocessing combinations including parameter variants"""
-    import csv
-    import json
-    import re
-    
     console.print(f"\n[bold magenta]Starting Benchmark[/bold magenta]")
     console.print(f"Preprocessing methods: {', '.join(preprocessing)}")
     console.print(f"Post-processing models: {', '.join(postprocessing)}")

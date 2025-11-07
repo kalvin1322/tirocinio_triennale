@@ -4,10 +4,44 @@ Complete guide for using the CT Reconstruction Tool via command line.
 
 ## Table of Contents
 - [Quick Start](#quick-start)
+- [Important: Parameter Configuration](#important-parameter-configuration)
 - [Interactive Mode](#interactive-mode)
 - [Non-Interactive Commands](#non-interactive-commands)
 - [Batch Processing / SLURM](#batch-processing--slurm)
 - [Examples](#examples)
+
+---
+
+## Important: Parameter Configuration
+
+### Preprocessing vs Postprocessing Parameters
+
+⚠️ **Critical Distinction**: 
+
+| Parameter Type | CLI Configurable? | Configuration File | When to Set |
+|----------------|-------------------|-------------------|-------------|
+| **Preprocessing** (SART/SIRT iterations, FBP filters) | ❌ **NO** | `configs/models_config.json` | Before training |
+| **Postprocessing** (UNet encoders, ResNet layers) | ✅ **YES** | `configs/model_parameters.json` | During training (CLI) |
+
+**Why?**
+- Preprocessing parameters affect the **dataset** and should be consistent across all models
+- Postprocessing parameters are **model-specific** and can vary per training run
+
+**Example Workflow:**
+
+```bash
+# Step 1: Configure SIRT iterations in models_config.json
+# Edit: configs/models_config.json
+# Set: "SIRT": { "default_iterations": 150 }
+
+# Step 2: Train with SIRT preprocessing (uses 150 iterations from config)
+python run.py train --preprocessing SIRT --postprocessing SimpleResNet --epochs 50
+
+# Step 3: Customize postprocessing model dynamically via CLI
+python run.py train --preprocessing SIRT --postprocessing SimpleResNet --num-layers 5 --features 64 --epochs 50
+```
+
+See [Model Configuration Guide](./MODEL_CONFIGURATION.md) for detailed explanation.
 
 ---
 
@@ -28,35 +62,6 @@ conda activate tirocinio
 # Structure: data/Mayo_s Dataset/{train,test}
 ```
 
----
-
-## Interactive Mode
-
-For beginners and exploratory work, use the interactive mode:
-
-```bash
-python run.py interactive
-# or simply
-python run.py
-```
-
-This launches a guided menu-driven interface that walks you through:
-- Creating/selecting experiments
-- Training models with visual parameter selection
-- Testing models with automatic result visualization
-- Benchmarking multiple models
-
-**When to use Interactive Mode:**
-- 🎯 First time using the tool
-- 🔍 Exploring different models and parameters
-- 📊 Quick experiments and testing
-- 🎓 Learning the workflow
-
-**When to use CLI Mode:**
-- 🖥️ Running on HPC clusters (SLURM, PBS)
-- 🤖 Automating workflows with scripts
-- 🔄 Batch processing multiple experiments
-- 📈 Hyperparameter sweeps
 
 ---
 
@@ -92,15 +97,45 @@ python run.py train --postprocessing UNet_V1 --epochs 50 --batch-size 8 --learni
 ```
 
 **Basic Options:**
-- `--postprocessing` / `-post`: Model to train (UNet_V1, ThreeL_SSNet) [required]
-- `--preprocessing` / `-pre`: Preprocessing method (default: FBP)
+- `--postprocessing` / `-post`: Model to train (UNet_V1, ThreeL_SSNet, SimpleResNet) [required]
+- `--preprocessing` / `-pre`: Preprocessing method (FBP, SART, SIRT) (default: FBP)
 - `--epochs`: Number of training epochs (default: 5)
 - `--batch-size` / `-b`: Batch size (default: 8)
 - `--learning-rate` / `-lr`: Learning rate (default: 1e-4)
 
-**UNet-Specific Options:**
-- `--num-encoders`: Number of encoder-decoder pairs (default: 3)
-- `--start-channels`: Starting middle channels (default: 64)
+**Postprocessing Model-Specific Parameters (Dynamic):**
+
+These parameters are **dynamically accepted** based on the model configuration in `configs/model_parameters.json`:
+
+- **UNet_V1:**
+  - `--num-encoders`: Number of encoder-decoder pairs (2-5, default: 3)
+  - `--start-channels`: Starting middle channels ([32,64,128,256], default: 64)
+
+- **SimpleResNet:**
+  - `--num-layers`: Number of residual layers (2-10, default: 4)
+  - `--features`: Features per layer ([16,32,64,128], default: 32)
+
+- **ThreeL_SSNet:**
+  - No tunable parameters
+
+**Preprocessing Parameters:**
+
+⚠️ **Important**: Preprocessing parameters (e.g., SART/SIRT iterations) are **NOT configurable via CLI**.  
+They must be set in `configs/models_config.json` before training.
+
+Example `models_config.json`:
+```json
+{
+  "preprocessing": {
+    "SART": {
+      "default_iterations": 50,
+      "tunable_params": {
+        "iterations": {"default": 50, "min": 10, "max": 200}
+      }
+    }
+  }
+}
+```
 
 **Advanced Options:**
 - `--experiment` / `-e`: Use specific experiment (default: current)
@@ -115,15 +150,19 @@ python run.py train --postprocessing UNet_V1 --epochs 50
 
 # Custom UNet architecture
 python run.py train --postprocessing UNet_V1 --num-encoders 4 --start-channels 128 --epochs 100
-# Output: FBP_UNet_V1_enc4_ch128_ep100_lr0001.pth
+# Output: FBP_UNet_V1_ep100_lr0001.pth
+
+# Train SimpleResNet with custom parameters
+python run.py train --postprocessing SimpleResNet --num-layers 3 --features 16 --epochs 50 --learning-rate 0.0001
+# Output: FBP_SimpleResNet_ep50_lr0001.pth
+
+# Train with SIRT preprocessing (iterations configured in models_config.json)
+python run.py train --preprocessing SIRT --postprocessing SimpleResNet --epochs 50
+# Output: SIRT_SimpleResNet_ep50_lr0001.pth
 
 # Train SSNet with specific experiment
 python run.py train --experiment experiment_20251030_120000 --postprocessing ThreeL_SSNet --epochs 75 --learning-rate 0.00005
 # Output: FBP_ThreeL_SSNet_ep75_lr00005.pth
-
-# High batch size training
-python run.py train --postprocessing UNet_V1 --epochs 50 --batch-size 16 --learning-rate 0.0001
-# Output: FBP_UNet_V1_ep50_lr00001.pth
 ```
 
 **Output:**

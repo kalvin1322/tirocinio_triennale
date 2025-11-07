@@ -5,11 +5,12 @@ import typer
 import yaml
 from rich.console import Console
 from rich.panel import Panel
-from rich.prompt import Prompt, Confirm
 from pathlib import Path
 
 from .interactive import run_interactive_mode
 from .commands import train_cmd, test_cmd, benchmark_cmd
+from .wizard import create_experiment_non_interactive, run_wizard
+from src.utils.model_params import validate_param
 
 app = typer.Typer(
     name="ct-benchmark",
@@ -32,33 +33,35 @@ def interactive():
     run_interactive_mode()
 
 
-@app.command()
+@app.command(context_settings={"allow_extra_args": True, "ignore_unknown_options": True})
 def train(
+    ctx: typer.Context,
     experiment: str = typer.Option(None, "--experiment", "-e", help="Experiment name (uses .current_experiment if not specified)"),
-    preprocessing: str = typer.Option("FBP", "--preprocessing", "-pre", help="Preprocessing method (FBP)"),
-    postprocessing: str = typer.Option(..., "--postprocessing", "-post", help="Postprocessing model (UNet_V1, ThreeL_SSNet)"),
+    preprocessing: str = typer.Option("FBP", "--preprocessing", "-pre", help="Preprocessing method (FBP, SART, SIRT)"),
+    postprocessing: str = typer.Option(..., "--postprocessing", "-post", help="Postprocessing model (UNet_V1, ThreeL_SSNet, SimpleResNet)"),
     epochs: int = typer.Option(5, "--epochs", help="Number of training epochs"),
     batch_size: int = typer.Option(8, "--batch-size", "-b", help="Batch size"),
     lr: float = typer.Option(1e-4, "--learning-rate", "-lr", help="Learning rate"),
-    num_encoders: int = typer.Option(None, "--num-encoders", help="UNet: Number of encoder-decoder pairs"),
-    start_middle_channels: int = typer.Option(None, "--start-channels", help="UNet: Starting middle channels"),
     geometry_config: str = typer.Option("default", "--geometry", "-g", help="Geometry configuration name")
 ):
     """
     🚀 Train a postprocessing model
     
+    Model-specific parameters are passed dynamically based on the model configuration.
+    
     Examples:
-      # Use current experiment
-      python main.py train --postprocessing UNet_V1 --epochs 50
-      
-      # Specify experiment
-      python main.py train -e my_experiment --postprocessing ThreeL_SSNet --epochs 100
+      # Basic training
+      python run.py train --postprocessing UNet_V1 --epochs 50
       
       # Custom UNet architecture
-      python main.py train --postprocessing UNet_V1 --num-encoders 4 --start-channels 128
+      python run.py train --postprocessing UNet_V1 --num-encoders 4 --start-channels 128
+      
+      # Custom SimpleResNet architecture
+      python run.py train --postprocessing SimpleResNet --num-layers 3 --features 16
+      
+      # With specific preprocessing
+      python run.py train --preprocessing SIRT --postprocessing SimpleResNet --epochs 10
     """
-    import yaml
-    
     # Load experiment config
     if experiment:
         exp_config_path = Path(f"experiments/{experiment}/experiment_config.yaml")
@@ -73,6 +76,49 @@ def train(
     with open(exp_config_path) as f:
         exp_config = yaml.safe_load(f)
     
+    # Parse extra arguments for model-specific parameters
+    model_params = {}
+    extra_args = ctx.args
+    i = 0
+    while i < len(extra_args):
+        arg = extra_args[i]
+        if arg.startswith('--'):
+            param_name = arg[2:].replace('-', '_')  # Convert --num-layers to num_layers
+            if i + 1 < len(extra_args) and not extra_args[i + 1].startswith('--'):
+                param_value = extra_args[i + 1]
+                # Try to convert to appropriate type
+                try:
+                    # Try int first
+                    model_params[param_name] = int(param_value)
+                except ValueError:
+                    try:
+                        # Try float
+                        model_params[param_name] = float(param_value)
+                    except ValueError:
+                        # Keep as string
+                        model_params[param_name] = param_value
+                i += 2
+            else:
+                i += 1
+        else:
+            i += 1
+    
+    # Display parsed model parameters
+    if model_params:
+        console.print(f"\n[cyan]Model-specific parameters:[/cyan]")
+        for key, value in model_params.items():
+            console.print(f"  {key}: {value}")
+        
+        # Validate parameters
+        console.print(f"\n[cyan]Validating parameters...[/cyan]")
+        for param_name, param_value in model_params.items():
+            is_valid, error_msg = validate_param(postprocessing, param_name, param_value)
+            if not is_valid:
+                console.print(f"[red]✗ Validation failed for {param_name}: {error_msg}[/red]")
+                raise typer.Exit(1)
+            else:
+                console.print(f"[green]✓ {param_name} = {param_value}[/green]")
+    
     # Call train command
     train_cmd(
         preprocessing=preprocessing,
@@ -83,8 +129,7 @@ def train(
         lr=lr,
         output=exp_config['output_dirs']['models'],
         geometry_config=geometry_config,
-        num_encoders=num_encoders,
-        start_middle_channels=start_middle_channels
+        **model_params
     )
 
 
@@ -108,8 +153,6 @@ def test(
       # Specify experiment
       python main.py test -e my_experiment -c FBP_UNet_V1.pth
     """
-    import yaml
-    
     # Load experiment config
     if experiment:
         exp_config_path = Path(f"experiments/{experiment}/experiment_config.yaml")
@@ -161,8 +204,6 @@ def create_experiment(
         --train-dataset "data/Mayo_s Dataset/train" \\
         --test-dataset "data/Mayo_s Dataset/test"
     """
-    from .wizard import create_experiment_non_interactive
-    
     exp_config = create_experiment_non_interactive(
         name=name,
         description=description,
@@ -223,7 +264,6 @@ def wizard():
     """
     🧙 Launch setup wizard for first-time configuration
     """
-    from .wizard import run_wizard
     run_wizard()
 
 

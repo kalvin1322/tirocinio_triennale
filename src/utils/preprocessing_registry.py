@@ -121,7 +121,18 @@ def sart_wrapper(vol_geom, sinogram_id, iterations=50, projector_type='linear',
         relaxation_factor=relaxation_factor
     )
 
-
+from models.SIRT_recostruction import run_sirt_reconstruction
+@register_preprocessing("SIRT")
+def sirt_wrapper(vol_geom, sinogram_id, iterations=50, projector_type='linear', min_constraint=0.0, max_constraint=None):
+    """SIRT (Simultaneous Iterative Reconstruction Technique) wrapper."""
+    return run_sirt_reconstruction(
+        vol_geom=vol_geom,
+        sinogram_id=sinogram_id,
+        iterations=iterations,
+        projector_type=projector_type,
+        min_constraint=min_constraint,
+        max_constraint=max_constraint
+    )
 # ============================================================================
 # Example: How to add a new method (commented out)
 # ============================================================================

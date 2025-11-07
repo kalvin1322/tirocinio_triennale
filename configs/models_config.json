@@ -19,6 +19,20 @@
           "description": "Number of SART iterations"
         }
       }
+    },
+    "SIRT":{
+      "name": "Simultaneous Iterative Reconstruction Technique",
+      "description": "Iterative reconstruction using SIRT algorithm",
+      "default_iterations": 100,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 100,
+          "description": "Number of SIRT iterations"
+        }
+      }
     }
   },
   "postprocessing": {
@@ -33,6 +47,11 @@
       "name": "Three-Level Squeeze-and-Excitation Network",
       "description": "Lightweight three-level squeeze-and-excitation network for fast enhancement",
       "class": "ThreeL_SSNet"
+    },
+    "SimpleResNet":{
+      "name": "Simple Residual Network",
+      "description": "A simple residual network (FCN) for post-processing",
+      "class": "SimpleResNet"
     }
   }
 }

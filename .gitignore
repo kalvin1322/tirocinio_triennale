@@ -1,6 +1,45 @@
 Mayo_s Dataset/
 __pycache__/
 .vscode/
+
+# Data folder (keep only README)
 data/*
 !data/README.md
 !data/.gitkeep
+
+# Experiments folder (keep folder structure, exclude all experiment contents)
+experiments/*
+!experiments/.gitkeep
+!experiments/README.md
+.current_experiment
+
+# Python cache and compiled files
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.so
+*.egg-info/
+dist/
+build/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE settings
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
+
+# Temporary files
+*.tmp
+*.bak

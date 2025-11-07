@@ -1,13 +1,13 @@
 """
 Setup wizard for experiment configuration
 """
+import os
+import inquirer
+import yaml
+from pathlib import Path
+from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
-import inquirer
-from pathlib import Path
-import yaml
-from datetime import datetime
-import os
 
 console = Console()
 

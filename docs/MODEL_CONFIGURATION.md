@@ -4,6 +4,19 @@
 
 The CT reconstruction tool now supports a flexible preprocessing and post-processing pipeline configuration system. This allows users to easily configure and test different combinations of preprocessing methods and post-processing models through a simple JSON configuration file.
 
+### Parameter Configuration: Preprocessing vs Postprocessing
+
+**Important Distinction:**
+
+| Aspect | Preprocessing Parameters | Postprocessing Parameters |
+|--------|-------------------------|---------------------------|
+| **Configuration Location** | `configs/models_config.json` | `configs/model_parameters.json` |
+| **CLI Support** | ❌ **NOT configurable via CLI** | ✅ **Dynamically configurable via CLI** |
+| **When to Set** | Before starting experiment | During training (CLI or interactive) |
+| **Scope** | Dataset-level (affects all models) | Model-specific (per training run) |
+
+
+
 ## Configuration File
 
 The model configuration is stored in `configs/models_config.json` with the following structure:
@@ -38,18 +51,6 @@ The model configuration is stored in `configs/models_config.json` with the follo
   }
 }
 ```
-
-## Pipeline Structure
-
-### Preprocessing Methods
-- **FBP (Filtered Back Projection)**: Analytical reconstruction method that converts sinograms to images
-- Can be extended with other preprocessing methods (e.g., iterative reconstruction, filtered sinograms)
-
-### Post-processing Models
-- **UNet_V1**: Deep learning model for image denoising/enhancement
-- **ThreeL_SSNet**: Advanced neural network with similarity structure learning
-- Models can be trained to improve reconstruction quality
-
 ## Usage
 
 ### Training
@@ -95,62 +96,94 @@ Testing 2 combinations:
 
 ## Adding New Models
 
+The system uses a **registry pattern** to make it easy to add new preprocessing methods and postprocessing models without modifying core code.
+
 ### Adding a Preprocessing Method
 
-Edit `configs/models_config.json`:
+**See complete guide**: **[Adding Preprocessing Methods](./ADDING_PREPROCESSING_METHODS.md)**
 
-```json
-"preprocessing": {
-  "FBP": { ... },
-  "SIRT": {
-    "name": "SIRT",
-    "description": "Simultaneous Iterative Reconstruction Technique",
-    "type": "reconstruction",
-    "requires_training": false
-  }
-}
-```
+---
 
 ### Adding a Post-processing Model
 
-1. Add the model configuration to `configs/models_config.json`:
+**Step 1: Implement your model class**
+
+Create your model in `src/models/MyNewModel.py`:
+
+```python
+import torch
+import torch.nn as nn
+
+class MyNewModel(nn.Module):
+    def __init__(self, in_channels=1, out_channels=1, num_layers=3):
+        super().__init__()
+        # Your model architecture
+        self.encoder = nn.Sequential(
+            nn.Conv2d(in_channels, 64, kernel_size=3, padding=1),
+            nn.ReLU(),
+            # ... more layers
+        )
+        
+    def forward(self, x):
+        # Forward pass
+        return self.encoder(x)
+```
+
+**Step 2: Register your model**
+
+Add to `src/utils/postprocessing_registry.py`:
+
+```python
+# Import your model
+from models.MyNewModel import MyNewModel
+
+# Register it with a decorator
+@register_postprocessing("MyNewModel")
+def mynewmodel_factory(in_channels=1, out_channels=1, num_layers=3, **kwargs):
+    """MyNewModel factory with custom parameters."""
+    return MyNewModel(
+        in_channels=in_channels, 
+        out_channels=out_channels,
+        num_layers=num_layers,
+        **kwargs
+    )
+```
+
+**Step 3: Add configuration**
+
+Add to `configs/models_config.json`:
 
 ```json
 "postprocessing": {
   "UNet_V1": { ... },
   "ThreeL_SSNet": { ... },
   "MyNewModel": {
-    "name": "MyNewModel",
-    "description": "My custom denoising model",
-    "model_class": "MyNewModel",
-    "requires_training": true,
-    "default_loss": "L1Loss",
-    "default_lr": 0.0001
+    "name": "My New Model",
+    "description": "My custom denoising model with advanced features",
+    "class": "MyNewModel",
+    "in_channels": 1,
+    "out_channels": 1
   }
 }
 ```
-
-2. Implement the model class in `src/models/MyNewModel.py`:
-
-```python
-import torch.nn as nn
-
-class MyNewModel(nn.Module):
-    def __init__(self):
-        super().__init__()
-        # Your model architecture
-        
-    def forward(self, x):
-        # Forward pass
-        return x
-```
-
-3. Update `src/cli/commands.py` to include the new model:
-
-```python
-# In train_cmd function
-elif postprocessing == 'MyNewModel':
-    model_instance = MyNewModel()
+Add to `configs/models_parameters.json`:
+```json
+{
+  "UNet_V1": { ... },
+  "ThreeL_SSNet": { ... },
+  "MyNewModel": {
+    "description": "A simple residual network (FCN) for post-processing",
+    "default_params": {
+      "in_channels": 1,
+      "out_channels": 1
+    },
+    "tunable_params": {
+      "num_layers": { ... },
+      "features": {...},
+      ...
+    }
+  }
+}
 ```
 
 ## Helper Functions
@@ -164,47 +197,50 @@ The `src/utils/models_config.py` module provides several helper functions:
 - `get_postprocessing_info(name)`: Get info about a specific post-processing model
 - `get_model_combinations(prep_list, postp_list)`: Generate all combinations for benchmarking
 
-## Benefits
-
-1. **Easy Configuration**: Add new models by editing JSON, no code changes needed
-2. **Flexible Pipelines**: Test different preprocessing + post-processing combinations
-3. **Comprehensive Benchmarking**: Automatically test all selected combinations
-4. **User-Friendly**: Interactive CLI guides users through model selection
-5. **Extensible**: Easy to add new preprocessing methods and post-processing models
 
 ## File Structure
 
 ```
 tirocinio/
 ├── configs/
-│   ├── models_config.json         # Model configurations
-│   └── projection_geometry.json   # Geometry configurations
+│   ├── models_config.json                # Model configurations (metadata)
+│   └── projection_geometry.json          # Geometry configurations
 ├── src/
 │   ├── cli/
-│   │   ├── commands.py            # Command implementations
-│   │   └── interactive.py         # Interactive menus
+│   │   ├── commands.py                   # Command implementations (uses registries)
+│   │   └── interactive.py                # Interactive menus
 │   ├── models/
-│   │   ├── UNet_V1.py
-│   │   └── ThreeL_SSNet.py
+│   │   ├── UNet_V1.py                    # Post-processing model
+│   │   ├── ThreeL_SSNet.py               # Post-processing model
+│   │   ├── FBP_reconstruction.py         # Preprocessing method
+│   │   ├── SART_reconstruction.py        # Preprocessing method
+│   │   └── SIRT_reconstruction.py        # Preprocessing method
+│   ├── dataloader/
+│   │   └── CTDataloader.py               # Uses preprocessing_registry
 │   └── utils/
-│       └── models_config.py       # Configuration helper functions
-└── outputs/
-    └── trained_models/            # Saved model checkpoints
+│       ├── models_config.py              # Configuration helper functions
+│       ├── preprocessing_registry.py     # ⭐ Register preprocessing methods here
+│       └── postprocessing_registry.py    # ⭐ Register postprocessing models here
+├── docs/
+│   ├── MODEL_CONFIGURATION.md            # This file
+│   └── ADDING_PREPROCESSING_METHODS.md   # Detailed preprocessing guide
+└── experiments/
+    └── */trained_models/                 # Saved model checkpoints
 ```
 
-## Example Workflow
+**Key Files for Adding Models:**
+- **`preprocessing_registry.py`** - Add new preprocessing methods
+- **`postprocessing_registry.py`** - Add new postprocessing models
+- **`models_config.json`** - Add metadata
+- **`model_parameters.json`** - Add model configuration
 
-1. **Configure models** (edit `configs/models_config.json` if needed)
-2. **Train models**:
-   ```
-   Select: FBP → UNet_V1
-   Train for 50 epochs
-   Save as: FBP_UNet_V1.pth
-   ```
-3. **Benchmark**:
-   ```
-   Select: [✓] FBP
-   Select: [✓] UNet_V1, [✓] ThreeL_SSNet
-   Test both combinations
-   Compare results
-   ```
+### Testing Your Addition
+If you want to test youre addition run in a custom python file this script, you should see the model that you've added:
+```python
+# Check if registered
+from src.utils.preprocessing_registry import list_preprocessing_methods
+from src.utils.postprocessing_registry import list_postprocessing_models
+
+print("Preprocessing:", list_preprocessing_methods())
+print("Postprocessing:", list_postprocessing_models())
+```

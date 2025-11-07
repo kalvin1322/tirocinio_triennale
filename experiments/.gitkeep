@@ -1,0 +1,2 @@
+# This file ensures the experiments/ folder exists in git
+# All experiment contents are excluded via .gitignore
