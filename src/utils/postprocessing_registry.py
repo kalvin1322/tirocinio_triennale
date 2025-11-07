@@ -96,7 +96,7 @@ def is_registered(name: str) -> bool:
 from models.UNet_V1 import UNet_V1
 from models.ThreeL_SSNet import ThreeL_SSNet
 from models.SimpleResNet import SimpleResNet
-
+from models.PostProcessNet import PostProcessNet
 
 @register_postprocessing("UNet_V1")
 def unet_v1_factory(in_channels=1, out_channels=1, num_encoders=3, start_middle_channels=32, **kwargs):
@@ -128,6 +128,16 @@ def simpleresnet_factory(in_channels=1, out_channels=1, num_layers=4, features=3
         features=features,
         **kwargs
     )
+@register_postprocessing("PostProcessNet")
+def postprocessnet_factory(in_channels=1, out_channels=1, hidden_channels=32, use_residual=True, **kwargs):
+    """Post Processing Network factory with configurable parameters."""
+    return PostProcessNet(
+        in_channels=in_channels,
+        out_channels=out_channels,
+        hidden_channels=hidden_channels,
+        use_residual=use_residual,
+        **kwargs
+)
 # ============================================================================
 # Example: How to add a new model
 # ============================================================================

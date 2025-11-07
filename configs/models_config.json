@@ -52,6 +52,11 @@
       "name": "Simple Residual Network",
       "description": "A simple residual network (FCN) for post-processing",
       "class": "SimpleResNet"
+    },
+    "PostProcessNet": {
+      "name": "Post Processing Network",
+      "description": "A generic post-processing network template",
+      "class": "PostProcessNet"
     }
   }
 }

@@ -1,9 +1,5 @@
 experiments:
-- name: experiment1_20251030_122154
-  description: first experiment test
-  created_at: '2025-10-30T12:22:48.485118'
-  config_path: experiments\experiment1_20251030_122154\experiment_config.yaml
-- name: batch_experiment
+- name: experiment_20251107_141347
   description: ''
-  created_at: '2025-10-30T16:49:07.762845'
-  config_path: experiments\batch_experiment\experiment_config.yaml
+  created_at: '2025-11-07T14:13:50.163373'
+  config_path: experiments\experiment_20251107_141347\experiment_config.yaml

@@ -21,7 +21,7 @@ from src.utils.train_test import train_step, test_step, save_model, save_test_re
 from src.dataloader.CTDataloader import CTDataset
 from src.utils.utilities import astra_projection
 from src.utils.postprocessing_registry import get_postprocessing_model, list_postprocessing_models
-from src.utils.model_params import build_model_params, validate_param, get_model_filename
+from src.utils.model_params import build_model_params, validate_param, get_model_filename, parse_model_params_from_filename
 
 console = Console()
 
@@ -141,8 +141,21 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     console.print(f"Using device: [cyan]{device}[/cyan]\n")
     
-    # Load model using registry
-    model_instance = get_model(model, in_channels=1, out_channels=1)
+    # Extract model parameters from checkpoint filename
+    checkpoint_filename = Path(checkpoint).name
+    model_params = parse_model_params_from_filename(checkpoint_filename, model)
+    
+    if model_params:
+        console.print(f"[cyan]Detected model parameters from filename:[/cyan]")
+        for param, value in model_params.items():
+            console.print(f"  {param}: {value}")
+        console.print()
+    
+    # Build complete parameters (defaults + parsed from filename)
+    full_params = build_model_params(model, **model_params)
+    
+    # Load model using registry with extracted parameters
+    model_instance = get_model(model, **full_params)
     if model_instance is None:
         return
     
@@ -279,8 +292,14 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
         
         # Load model and run test to collect metrics
         try:
-            # Load model
-            model_instance = get_model(postp)
+            # Extract parameters from checkpoint filename
+            model_params_from_file = parse_model_params_from_filename(checkpoint_name, postp)
+            
+            # Build complete model parameters (merge with defaults if needed)
+            model_params = build_model_params(postp, **model_params_from_file)
+            
+            # Load model with correct parameters
+            model_instance = get_model(postp, **model_params)
             if model_instance is None:
                 continue
             

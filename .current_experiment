@@ -7,14 +7,13 @@ datasets:
   train: C:\Users\jonas\develop_area\tirocinio\data\Mayo_s Dataset\train
   train_samples: 3306
 experiment:
-  created_at: '2025-10-30T12:22:48.465880'
-  description: first experiment test
-  name: experiment1_20251030_122154
-  timestamp: '20251030_122154'
+  created_at: '2025-11-07T14:13:50.163373'
+  description: ''
+  name: experiment_20251107_141347
+  timestamp: '20251107_141347'
 output_dirs:
-  base: experiments\experiment1_20251030_122154
-  benchmarks: experiments\experiment1_20251030_122154\benchmarks
-  checkpoints: experiments\experiment1_20251030_122154\checkpoints
-  logs: experiments\experiment1_20251030_122154\logs
-  models: experiments\experiment1_20251030_122154\trained_models
-  results: experiments\experiment1_20251030_122154\test_results
+  base: experiments\experiment_20251107_141347
+  benchmarks: experiments\experiment_20251107_141347\benchmarks
+  logs: experiments\experiment_20251107_141347\logs
+  models: experiments\experiment_20251107_141347\trained_models
+  results: experiments\experiment_20251107_141347\test_results

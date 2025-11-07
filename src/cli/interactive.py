@@ -273,6 +273,54 @@ def train_interactive(experiment_config):
                             validate=lambda _, x, min_v=min_val, max_v=max_val: x.isdigit() and min_v <= int(x) <= max_v
                         )
                     )
+            elif param_config['type'] == 'bool':
+                # Boolean choice (Yes/No)
+                questions.append(
+                    inquirer.List(
+                        param_name,
+                        message=description,
+                        choices=[
+                            ('Yes', True),
+                            ('No', False)
+                        ],
+                        default=param_config.get('default', True)
+                    )
+                )
+            elif param_config['type'] == 'float':
+                # Float input with min/max validation
+                min_val = param_config.get('min', 0.0)
+                max_val = param_config.get('max', 1.0)
+                questions.append(
+                    inquirer.Text(
+                        param_name,
+                        message=f"{description} ({min_val}-{max_val})",
+                        default=default_value,
+                        validate=lambda _, x, min_v=min_val, max_v=max_val: 
+                            x.replace('.', '', 1).replace('-', '', 1).isdigit() and 
+                            min_v <= float(x) <= max_v
+                    )
+                )
+            elif param_config['type'] == 'string':
+                if 'options' in param_config:
+                    # Multiple choice for string options
+                    choices = [(str(opt), str(opt)) for opt in param_config['options']]
+                    questions.append(
+                        inquirer.List(
+                            param_name,
+                            message=description,
+                            choices=choices,
+                            default=default_value
+                        )
+                    )
+                else:
+                    # Free text input
+                    questions.append(
+                        inquirer.Text(
+                            param_name,
+                            message=description,
+                            default=default_value
+                        )
+                    )
     
     # Add common training parameters
     questions.extend([
@@ -342,11 +390,19 @@ def train_interactive(experiment_config):
                 'experiment': experiment_config['experiment']['name']
             }
             
-            # Add UNet-specific parameters if present
-            if 'num_encoders' in answers:
-                training_config['num_encoders'] = int(answers['num_encoders'])
-            if 'start_middle_channels' in answers:
-                training_config['start_middle_channels'] = int(answers['start_middle_channels'])
+            # Add model-specific tunable parameters dynamically with type conversion
+            if tunable_params:
+                for param_name, param_config in tunable_params.items():
+                    if param_name in answers:
+                        param_type = param_config['type']
+                        if param_type == 'int':
+                            training_config[param_name] = int(answers[param_name])
+                        elif param_type == 'bool':
+                            training_config[param_name] = bool(answers[param_name])
+                        elif param_type == 'float':
+                            training_config[param_name] = float(answers[param_name])
+                        else:
+                            training_config[param_name] = answers[param_name]
             
             with open(config_path, 'w') as f:
                 yaml.dump(training_config, f, default_flow_style=False, sort_keys=False)
@@ -368,11 +424,19 @@ def train_interactive(experiment_config):
                 'output': output_dir
             }
             
-            # Add UNet-specific parameters if present
-            if 'num_encoders' in answers:
-                train_args['num_encoders'] = int(answers['num_encoders'])
-            if 'start_middle_channels' in answers:
-                train_args['start_middle_channels'] = int(answers['start_middle_channels'])
+            # Add all tunable parameters dynamically with type conversion
+            if tunable_params:
+                for param_name, param_config in tunable_params.items():
+                    if param_name in answers:
+                        param_type = param_config['type']
+                        if param_type == 'int':
+                            train_args[param_name] = int(answers[param_name])
+                        elif param_type == 'bool':
+                            train_args[param_name] = bool(answers[param_name])
+                        elif param_type == 'float':
+                            train_args[param_name] = float(answers[param_name])
+                        else:
+                            train_args[param_name] = answers[param_name]
 
             train_cmd(**train_args)
             
@@ -456,14 +520,33 @@ def test_interactive(experiment_config):
         checkpoint_name = Path(answers['checkpoint']).stem
         
         # Extract base model name (without parameters)
-        # Example: SIRT_SimpleResNet_ep3_lr10000 -> SimpleResNet
-        parts = checkpoint_name.split('_')
-        # Find the postprocessing model name (after preprocessing, before _ep or _ch, etc.)
-        if len(parts) >= 2:
-            # Skip preprocessing (first part), get model name
-            model_name = parts[1]
-        else:
-            model_name = checkpoint_name
+        # Need to handle multi-part model names like "UNet_V1"
+        # Strategy: Remove preprocessing prefix, then find registered model name
+        from utils.models_config import get_postprocessing_models
+        registered_models = get_postprocessing_models()
+        
+        # Remove preprocessing prefix (FBP_, SART_, SIRT_)
+        checkpoint_clean = checkpoint_name
+        for prep in get_preprocessing_models():
+            if checkpoint_clean.startswith(prep + '_'):
+                checkpoint_clean = checkpoint_clean[len(prep) + 1:]
+                break
+        
+        # Try to match against registered models (handles multi-part names)
+        # Sort by length descending to match longest names first (e.g., "UNet_V1_Extended" before "UNet_V1")
+        model_name = None
+        for registered in sorted(registered_models, key=len, reverse=True):
+            if checkpoint_clean.startswith(registered + '_') or checkpoint_clean == registered:
+                model_name = registered
+                break
+        
+        # Fallback: if no match, try simple extraction
+        if not model_name:
+            parts = checkpoint_name.split('_')
+            if len(parts) >= 2:
+                model_name = parts[1]
+            else:
+                model_name = checkpoint_name
         
         # Use test dataset from experiment config
         test_dataset = experiment_config['datasets']['test']

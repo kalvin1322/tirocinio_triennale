@@ -52,5 +52,27 @@
         "description": "Number of features in each convolutional layer"
       }
     }
+  
+  },
+  "PostProcessNet": {
+    "description": "A generic post-processing network template",
+    "default_params": {
+      "in_channels": 1,
+      "out_channels": 1
+    },
+    "tunable_params": {
+      "hidden_channels": {
+        "type": "int",
+        "options": [16, 32, 64, 128],
+        "default": 32,
+        "description": "Number of hidden channels in the network"
+      },
+      "use_residual": {
+        "type": "bool",
+        "default": true,
+        "description": "Whether to use residual connections"
+      }
+    }
   }
+
 }

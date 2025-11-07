@@ -209,7 +209,11 @@ def run_wizard():
         experiments_index = Path("experiments") / "experiments_index.yaml"
         if experiments_index.exists():
             with open(experiments_index, 'r') as f:
-                index = yaml.safe_load(f) or {'experiments': []}
+                index = yaml.safe_load(f)
+                if not index or not isinstance(index, dict):
+                    index = {'experiments': []}
+                elif 'experiments' not in index:
+                    index['experiments'] = []
         else:
             index = {'experiments': []}
         
@@ -334,7 +338,11 @@ def create_experiment_non_interactive(name: str = None, description: str = "",
     
     if experiments_index.exists():
         with open(experiments_index) as f:
-            index = yaml.safe_load(f) or {'experiments': []}
+            index = yaml.safe_load(f)
+            if not index or not isinstance(index, dict):
+                index = {'experiments': []}
+            elif 'experiments' not in index:
+                index['experiments'] = []
     else:
         index = {'experiments': []}
     

@@ -1,2 +1,0 @@
-model_full_name,preprocessing,postprocessing,checkpoint,psnr,ssim,mse,test_loss
-SART_UNet_V1_ch32_ep5_lr100,SART,UNet_V1,SART_UNet_V1_ch32_ep5_lr100.pth,28.678327560424805,0.8157936334609985,0.001355711055637568,0.018226748303900437

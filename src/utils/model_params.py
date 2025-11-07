@@ -121,14 +121,24 @@ def get_model_filename(preprocessing: str, postprocessing: str, epochs: int = No
         
         # Include in filename if: explicitly provided and different from default
         if param_value is not None and param_value != default_value:
-            # Create short suffix based on parameter name
-            if param_name == "num_encoders":
-                param_parts.append(f"enc{param_value}")
-            elif param_name == "start_middle_channels":
-                param_parts.append(f"ch{param_value}")
+            # Create short suffix based on parameter name (consistent with parser)
+            param_abbrev_map = {
+                'num_encoders': 'enc',
+                'start_middle_channels': 'ch',
+                'hidden_channels': 'hc',
+                'num_layers': 'lay',
+                'features': 'fea',
+                'use_residual': 'res',
+            }
+            
+            # Use mapped abbreviation or first 3 chars as fallback
+            abbrev = param_abbrev_map.get(param_name, param_name[:3])
+            
+            # Format value based on type
+            if isinstance(param_value, bool):
+                param_parts.append(f"{abbrev}{1 if param_value else 0}")
             else:
-                # Generic format for other params
-                param_parts.append(f"{param_name[:3]}{param_value}")
+                param_parts.append(f"{abbrev}{param_value}")
     
     if param_parts:
         base_name += "_" + "_".join(param_parts)
@@ -147,3 +157,89 @@ def get_model_filename(preprocessing: str, postprocessing: str, epochs: int = No
         base_name += "_" + "_".join(training_parts)
     
     return f"{base_name}.pth"
+
+
+def parse_model_params_from_filename(filename: str, postprocessing_model: str) -> Dict[str, Any]:
+    """
+    Parse model parameters from checkpoint filename.
+    
+    Args:
+        filename: Checkpoint filename (e.g., "FBP_PostProcessNet_hc16_ep50_lr0001.pth")
+        postprocessing_model: Model name to get parameter mappings
+    
+    Returns:
+        Dictionary with parsed parameters
+    
+    Examples:
+        >>> parse_model_params_from_filename("FBP_UNet_V1_enc4_ch128_ep50.pth", "UNet_V1")
+        {'num_encoders': 4, 'start_middle_channels': 128}
+        
+        >>> parse_model_params_from_filename("FBP_PostProcessNet_hc16_ep50.pth", "PostProcessNet")
+        {'hidden_channels': 16}
+    """
+    import re
+    
+    # Remove preprocessing prefix and extension
+    filename_clean = filename.replace('.pth', '')
+    
+    # Get tunable params for this model
+    tunable = get_tunable_params(postprocessing_model)
+    if not tunable:
+        return {}
+    
+    # Remove preprocessing method and model name from filename
+    # This handles multi-part model names like "UNet_V1"
+    for prep_method in ['FBP', 'SART', 'SIRT']:
+        if filename_clean.startswith(prep_method + '_'):
+            filename_clean = filename_clean[len(prep_method) + 1:]
+            break
+    
+    # Remove model name (handles underscores in model name)
+    if filename_clean.startswith(postprocessing_model + '_'):
+        filename_clean = filename_clean[len(postprocessing_model) + 1:]
+    
+    # Now split and parse
+    parts = filename_clean.split('_')
+    
+    parsed_params = {}
+    
+    # Look for known parameter patterns in the filename
+    for part in parts:
+        # Skip training params
+        if part.startswith('ep') or part.startswith('lr'):
+            continue
+        
+        # Try to match parameter patterns
+        # Pattern: enc4, ch128, hc16, etc.
+        match = re.match(r'([a-z]+)(\d+)', part, re.IGNORECASE)
+        if match:
+            prefix, value = match.groups()
+            
+            # Map abbreviations to full parameter names
+            param_mapping = {
+                'enc': 'num_encoders',
+                'ch': 'start_middle_channels',
+                'hc': 'hidden_channels',
+                'lay': 'num_layers',
+                'fea': 'features',
+                'res': 'use_residual',
+            }
+            
+            param_name = param_mapping.get(prefix.lower())
+            
+            # If we found a known parameter, parse its value
+            if param_name and param_name in tunable:
+                param_config = tunable[param_name]
+                param_type = param_config.get('type', 'int')
+                
+                if param_type == 'int':
+                    parsed_params[param_name] = int(value)
+                elif param_type == 'float':
+                    parsed_params[param_name] = float(value)
+                elif param_type == 'bool':
+                    parsed_params[param_name] = value in ('1', 'true', 'True')
+                else:
+                    parsed_params[param_name] = value
+    
+    return parsed_params
+

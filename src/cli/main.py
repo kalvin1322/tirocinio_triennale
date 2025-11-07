@@ -11,6 +11,7 @@ from .interactive import run_interactive_mode
 from .commands import train_cmd, test_cmd, benchmark_cmd
 from .wizard import create_experiment_non_interactive, run_wizard
 from src.utils.model_params import validate_param
+from src.utils.models_config import get_postprocessing_models
 
 app = typer.Typer(
     name="ct-benchmark",
@@ -136,7 +137,8 @@ def train(
 @app.command()
 def test(
     experiment: str = typer.Option(None, "--experiment", "-e", help="Experiment name (uses .current_experiment if not specified)"),
-    checkpoint: str = typer.Option(..., "--checkpoint", "-c", help="Model checkpoint filename (e.g., FBP_UNet_V1.pth)"),
+    checkpoint: str = typer.Option(..., "--checkpoint", "-c", help="Model checkpoint filename (e.g., FBP_UNet_V1_enc2_ch32.pth)"),
+    model: str = typer.Option(None, "--model", "-m", help="Model name (e.g., UNet_V1, PostProcessNet). Auto-detected if not specified."),
     visualize: bool = typer.Option(False, "--visualize", "-v", help="Generate visualization plots"),
     num_samples: int = typer.Option(5, "--num-samples", "-n", help="Number of samples to visualize")
 ):
@@ -144,8 +146,11 @@ def test(
     🧪 Test a trained model
     
     Examples:
-      # Basic test
-      python main.py test --checkpoint FBP_UNet_V1.pth
+      # Basic test (auto-detects model)
+      python main.py test --checkpoint FBP_UNet_V1_enc2_ch32.pth
+      
+      # Explicit model specification
+      python main.py test -c SART_PostProcessNet_hc16.pth --model PostProcessNet
       
       # Test with visualization
       python main.py test -c FBP_ThreeL_SSNet.pth --visualize --num-samples 10
@@ -172,12 +177,35 @@ def test(
         console.print(f"[red]Error: Checkpoint not found at {checkpoint_path}[/red]")
         raise typer.Exit(1)
     
-    # Extract model name from checkpoint
-    model_name = checkpoint.replace('.pth', '')
+    # Extract model name from checkpoint if not provided
+    if model is None:
+        # Remove .pth extension
+        checkpoint_stem = checkpoint.replace('.pth', '')
+        
+        # Get all registered postprocessing models
+        registered_models = get_postprocessing_models()
+        
+        # Sort by length (longest first) to match multi-part names correctly
+        registered_models_sorted = sorted(registered_models, key=len, reverse=True)
+        
+        # Try to find matching model in checkpoint name
+        model_found = False
+        for registered_model in registered_models_sorted:
+            if registered_model in checkpoint_stem:
+                model = registered_model
+                model_found = True
+                console.print(f"[cyan]Auto-detected model: {model}[/cyan]")
+                break
+        
+        if not model_found:
+            console.print(f"[red]Error: Could not auto-detect model from checkpoint name: {checkpoint}[/red]")
+            console.print(f"[yellow]Please specify the model explicitly using --model[/yellow]")
+            console.print(f"[cyan]Available models: {', '.join(registered_models)}[/cyan]")
+            raise typer.Exit(1)
     
     # Call test command
     test_cmd(
-        model=model_name,
+        model=model,
         checkpoint=str(checkpoint_path),
         dataset=exp_config['datasets']['test'],
         output=exp_config['output_dirs']['results'],
