@@ -21,7 +21,7 @@ from src.utils.train_test import train_step, test_step, save_model, save_test_re
 from src.dataloader.CTDataloader import CTDataset
 from src.utils.utilities import astra_projection
 from src.utils.postprocessing_registry import get_postprocessing_model, list_postprocessing_models
-from src.utils.model_params import build_model_params, validate_param, get_model_filename, parse_model_params_from_filename
+from src.utils.model_params import build_model_params, validate_param, get_model_filename
 
 console = Console()
 
@@ -116,8 +116,25 @@ def train_cmd(preprocessing: str, postprocessing: str, dataset: str, epochs: int
     model_filename = get_model_filename(preprocessing, postprocessing, epochs=epochs, lr=lr, **params)
     model_save_name = model_filename.replace('.pth', '')  # Remove extension for save_model
     
+    # Prepare metadata
+    metadata = {
+        'model_name': postprocessing,
+        'preprocessing': preprocessing,
+        'model_parameters': params,
+        'training_parameters': {
+            'epochs': epochs,
+            'batch_size': batch_size,
+            'learning_rate': lr,
+            'loss_function': loss_fn.__class__.__name__,
+        },
+        'dataset': dataset,
+        'geometry_config': geometry_config,
+        'timestamp': datetime.now().isoformat(),
+        'device': str(device)
+    }
+    
     console.print(f"[dim]Saving model as: {model_filename}[/dim]")
-    save_path = save_model(model_instance, model_save_name, output_path=str(output_path))
+    save_path = save_model(model_instance, model_save_name, output_path=str(output_path), metadata=metadata)
     
     console.print(f"\n[bold green]✓ Training completed![/bold green]")
     console.print(f"Model saved to: [cyan]{save_path}[/cyan]\n")
@@ -141,17 +158,23 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     console.print(f"Using device: [cyan]{device}[/cyan]\n")
     
-    # Extract model parameters from checkpoint filename
-    checkpoint_filename = Path(checkpoint).name
-    model_params = parse_model_params_from_filename(checkpoint_filename, model)
+    # Load metadata from JSON file
+    from src.utils.model_params import load_checkpoint_metadata
+    metadata = load_checkpoint_metadata(checkpoint)
     
-    if model_params:
-        console.print(f"[cyan]Detected model parameters from filename:[/cyan]")
-        for param, value in model_params.items():
-            console.print(f"  {param}: {value}")
-        console.print()
+    if not metadata or 'model_parameters' not in metadata:
+        console.print(f"[red]Error: Metadata file not found for checkpoint {checkpoint}[/red]")
+        console.print(f"[yellow]Make sure the .json file exists alongside the .pth checkpoint[/yellow]")
+        return
     
-    # Build complete parameters (defaults + parsed from filename)
+    console.print(f"[green]✓ Loaded model parameters from metadata file[/green]")
+    model_params = metadata['model_parameters']
+    console.print(f"[cyan]Model parameters:[/cyan]")
+    for param, value in model_params.items():
+        console.print(f"  {param}: {value}")
+    console.print()
+    
+    # Build complete parameters (defaults + loaded from metadata)
     full_params = build_model_params(model, **model_params)
     
     # Load model using registry with extracted parameters
@@ -292,8 +315,16 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
         
         # Load model and run test to collect metrics
         try:
-            # Extract parameters from checkpoint filename
-            model_params_from_file = parse_model_params_from_filename(checkpoint_name, postp)
+            # Load metadata from JSON file
+            from src.utils.model_params import load_checkpoint_metadata
+            metadata = load_checkpoint_metadata(checkpoint_path)
+            
+            if not metadata or 'model_parameters' not in metadata:
+                console.print(f"[red]Error: Metadata file not found for {checkpoint_name}[/red]")
+                continue
+            
+            model_params_from_file = metadata['model_parameters']
+            console.print(f"[dim]  Loaded parameters from metadata[/dim]")
             
             # Build complete model parameters (merge with defaults if needed)
             model_params = build_model_params(postp, **model_params_from_file)

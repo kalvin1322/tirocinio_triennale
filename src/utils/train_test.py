@@ -6,13 +6,14 @@ from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
 
-def save_model(model: torch.nn.Module, model_name: str = None, output_path: str = None):
-    """Saves a PyTorch model to the specified directory.
+def save_model(model: torch.nn.Module, model_name: str = None, output_path: str = None, metadata: dict = None):
+    """Saves a PyTorch model to the specified directory along with metadata.
     
     Args:
         model: The PyTorch model to save
         model_name: Optional custom name. If None, uses the model's class name
         output_path: Directory where to save the model. If None, uses 'outputs/trained_models'
+        metadata: Optional dictionary with model parameters and training info
     """
     # 1. Create model directory
     if output_path is None:
@@ -37,6 +38,14 @@ def save_model(model: torch.nn.Module, model_name: str = None, output_path: str 
     print(f"Saving the model to: {MODEL_SAVE_PATH}...")
     torch.save(obj=model.state_dict(), f=MODEL_SAVE_PATH)
     print(f"Model saved successfully as '{model_name}'!")
+    
+    # 5. Save metadata as JSON if provided
+    if metadata is not None:
+        metadata_path = MODEL_SAVE_PATH.with_suffix('.json')
+        print(f"Saving metadata to: {metadata_path}...")
+        with open(metadata_path, 'w') as f:
+            json.dump(metadata, f, indent=2)
+        print(f"Metadata saved successfully!")
     
     return MODEL_SAVE_PATH
 
@@ -162,7 +171,6 @@ def save_visualization_plots(original_image: torch.Tensor, sinogram: np.ndarray,
     plt.savefig(plot_filename, dpi=150, bbox_inches='tight')
     plt.close(fig)  # Close to free memory
     
-    print(f"Visualization plot saved to: {plot_filename}")
     return plot_filename
 
 def train_step(model: torch.nn.Module, 
@@ -245,8 +253,6 @@ def test_step(model: torch.nn.Module,
         # Calculate the test acc average per batch
         final_ssim = ssim_metric.compute()
         final_psnr = psnr_metric.compute()
-        # Print out what's happening
-        print(f"\nTest loss: {test_loss:.4f} | Test SSIM: {final_ssim:.4f} | Test PSNR: {final_psnr:.2f} dB | Test MSE: {mse_avg:.6f}\n")
         
         # Return metrics as dictionary
         return {

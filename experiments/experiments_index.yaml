@@ -1,5 +1,5 @@
 experiments:
-- name: experiment_20251107_141347
+- name: experiment_20251111_115226
   description: ''
-  created_at: '2025-11-07T14:13:50.163373'
-  config_path: experiments\experiment_20251107_141347\experiment_config.yaml
+  created_at: '2025-11-11T11:52:33.035306'
+  config_path: experiments\experiment_20251111_115226\experiment_config.yaml
