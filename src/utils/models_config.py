@@ -40,7 +40,10 @@ def get_postprocessing_models(config_path: str = "configs/models_config.json") -
     config = load_models_config(config_path)
     return list(config.get('postprocessing', {}).keys())
 
-
+def get_refining_models(config_path: str = "configs/models_config.json") -> List[str]:
+    """Get list of available refining models"""
+    config = load_models_config(config_path)
+    return list(config.get('refining', {}).keys())
 def get_preprocessing_info(model_name: str, config_path: str = "configs/models_config.json") -> Dict:
     """Get information about a specific preprocessing model"""
     config = load_models_config(config_path)

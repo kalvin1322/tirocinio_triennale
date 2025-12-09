@@ -133,6 +133,29 @@ def sirt_wrapper(vol_geom, sinogram_id, iterations=50, projector_type='linear', 
         min_constraint=min_constraint,
         max_constraint=max_constraint
     )
+
+from models.Fista_Tv_recostruction import run_fista_tv_reconstruction
+@register_preprocessing("FISTA_TV")
+def fista_tv_wrapper(vol_geom, sinogram_id, iterations=50, lambda_tv=0.1, **kwargs):
+    """Wrapper per FISTA con Total Variation."""
+    # Nota: richiede che tu abbia creato il file src/models/Advanced_reconstruction.py
+    return run_fista_tv_reconstruction(
+        vol_geom=vol_geom,
+        sinogram_id=sinogram_id,
+        iterations=iterations,
+        lambda_tv=lambda_tv
+    )
+from models.ADMM_tv_recostruction import run_admm_tv_reconstruction
+@register_preprocessing("ADMM_TV")
+def admm_tv_wrapper(vol_geom, sinogram_id, iterations=50, rho=1.0, lambda_tv=0.1, **kwargs):
+    """Wrapper per ADMM con Total Variation."""
+    return run_admm_tv_reconstruction(
+        vol_geom=vol_geom,
+        sinogram_id=sinogram_id,
+        iterations=iterations,
+        rho=rho,
+        lambda_tv=lambda_tv
+    )
 # ============================================================================
 # Example: How to add a new method (commented out)
 # ============================================================================

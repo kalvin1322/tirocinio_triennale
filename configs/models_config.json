@@ -33,6 +33,58 @@
           "description": "Number of SIRT iterations"
         }
       }
+    },
+    "FISTA_TV": {
+      "name": "FISTA with Total Variation",
+      "description": "Fast Iterative Shrinkage-Thresholding Algorithm with TV regularization",
+      "default_iterations": 50,
+      "default_lambda_tv": 0.1,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 50,
+          "description": "Number of FISTA iterations"
+        },
+        "lambda_tv": {
+          "type": "float",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.1,
+          "description": "Weight of the TV regularization"
+        }
+      }
+    },
+    "ADMM_TV": {
+      "name": "ADMM with Total Variation",
+      "description": "Alternating Direction Method of Multipliers with TV regularization",
+      "default_iterations": 50,
+      "default_rho": 1.0,
+      "default_lambda_tv": 0.1,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 50,
+          "description": "Number of ADMM iterations"
+        },
+        "rho": {
+          "type": "float",
+          "min": 0.1,
+          "max": 10.0,
+          "default": 1.0,
+          "description": "ADMM penalty parameter"
+        },
+        "lambda_tv": {
+          "type": "float",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.1,
+          "description": "Weight of the TV regularization"
+        }
+      }
     }
   },
   "postprocessing": {
@@ -57,6 +109,82 @@
       "name": "Post Processing Network",
       "description": "A generic post-processing network template",
       "class": "PostProcessNet"
+    }
+  },
+  "refining": {
+     "FISTA_TV": {
+      "name": "FISTA with Total Variation",
+      "description": "Fast Iterative Shrinkage-Thresholding Algorithm with TV regularization",
+      "default_iterations": 10,
+      "default_lambda_tv": 0.1,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 10,
+          "description": "Number of FISTA iterations"
+        },
+        "lambda_tv": {
+          "type": "float",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.1,
+          "description": "Weight of the TV regularization"
+        }
+      }
+    },
+    "CHAMBOLLE_POCK": {
+      "name": "Chambolle-Pock Algorithm",
+      "description": "Primal-dual algorithm for TV-regularized reconstruction",
+      "default_iterations": 10,
+      "default_lambda_tv": 0.1,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 10,
+          "description": "Number of Chambolle-Pock iterations"
+        },
+        "lambda_tv": {
+          "type": "float",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.1,
+          "description": "Weight of the TV regularization"
+        }
+      }
+    },
+    "ADMM_TV": {
+      "name": "ADMM with Total Variation",
+      "description": "Alternating Direction Method of Multipliers with TV regularization",
+      "default_iterations": 10,
+      "default_rho": 1.0,
+      "default_lambda_tv": 0.1,
+      "tunable_params": {
+        "iterations": {
+          "type": "int",
+          "min": 10,
+          "max": 200,
+          "default": 10,
+          "description": "Number of ADMM iterations"
+        },
+        "rho": {
+          "type": "float",
+          "min": 0.1,
+          "max": 10.0,
+          "default": 1.0,
+          "description": "ADMM penalty parameter"
+        },
+        "lambda_tv": {
+          "type": "float",
+          "min": 0.0,
+          "max": 1.0,
+          "default": 0.1,
+          "description": "Weight of the TV regularization"
+        }
+      }
     }
   }
 }

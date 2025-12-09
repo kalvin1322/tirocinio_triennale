@@ -104,8 +104,9 @@ def save_test_results(model_instance: torch.nn.Module, checkpoint_path: str,
 
 def save_visualization_plots(original_image: torch.Tensor, sinogram: np.ndarray,
                             fbp_reconstruction: np.ndarray, model_output: torch.Tensor,
-                            output_dir: str, model_name: str, sample_idx: int = 0):
-    """Saves visualization plots comparing original, sinogram, FBP and model reconstruction.
+                            output_dir: str, model_name: str, sample_idx: int = 0, 
+                            refined_output: torch.Tensor = None):
+    """Saves visualization plots comparing original, sinogram, FBP, model and optionally refined reconstruction.
     
     Args:
         original_image: Original ground truth image (torch.Tensor)
@@ -115,6 +116,7 @@ def save_visualization_plots(original_image: torch.Tensor, sinogram: np.ndarray,
         output_dir: Base directory where to save the plots
         model_name: Name of the model for the filename
         sample_idx: Index of the sample being visualized
+        refined_output: Optional refined output (torch.Tensor), if None will show 4 plots instead of 5
     
     Returns:
         Path: Path to the saved plot file
@@ -137,8 +139,11 @@ def save_visualization_plots(original_image: torch.Tensor, sinogram: np.ndarray,
     else:
         model_output_np = model_output
     
-    # Create the figure with 4 subplots
-    fig, axes = plt.subplots(1, 4, figsize=(20, 5))
+    # Determine number of subplots based on whether refining was used
+    num_plots = 5 if refined_output is not None else 4
+    
+    # Create the figure
+    fig, axes = plt.subplots(1, num_plots, figsize=(5 * num_plots, 5))
     
     # Original image
     axes[0].imshow(original_np, cmap='gray')
@@ -161,11 +166,23 @@ def save_visualization_plots(original_image: torch.Tensor, sinogram: np.ndarray,
     axes[3].set_title(f"4. Ricostruzione {model_name} (Output)")
     axes[3].axis('off')
     
+    # Refined output (if available)
+    if refined_output is not None:
+        if torch.is_tensor(refined_output):
+            refined_output_np = refined_output.squeeze().cpu().numpy()
+        else:
+            refined_output_np = refined_output
+        
+        axes[4].imshow(refined_output_np, cmap='gray')
+        axes[4].set_title("5. Output Refined (Post-Processing)")
+        axes[4].axis('off')
+    
     plt.tight_layout()
     
     # Generate filename with timestamp
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    plot_filename = plots_dir / f"visualization_{model_name}_sample{sample_idx}_{timestamp}.png"
+    refined_suffix = "_refined" if refined_output is not None else ""
+    plot_filename = plots_dir / f"visualization_{model_name}_sample{sample_idx}{refined_suffix}_{timestamp}.png"
     
     # Save the figure
     plt.savefig(plot_filename, dpi=150, bbox_inches='tight')
@@ -246,13 +263,14 @@ def test_step(model: torch.nn.Module,
             ssim_metric.update(test_pred, y)
             psnr_metric.update(test_pred, y)
         
+        
         # Calculate the test loss average per batch
         test_loss /= len(data_loader)
         mse_avg = mse_total / len(data_loader)
 
         # Calculate the test acc average per batch
         final_ssim = ssim_metric.compute()
-        final_psnr = psnr_metric.compute()
+        final_psnr = psnr_metric.compute() 
         
         # Return metrics as dictionary
         return {
@@ -261,4 +279,165 @@ def test_step(model: torch.nn.Module,
             'psnr': float(final_psnr.cpu()),
             'mse': float(mse_avg)
         }
+
+
+def apply_refining_to_dataset(model_instance, refining_model, test_dataset, device, 
+                               store_outputs=False, console=None):
+    """
+    Apply refining to all samples in a dataset and compute metrics.
+    
+    Args:
+        model_instance: The trained model
+        refining_model: The refining function from registry
+        test_dataset: The test dataset
+        device: The device to run on
+        store_outputs: Whether to store outputs for visualization
+        console: Rich console for progress display (optional)
+        
+    Returns:
+        tuple: (refined_results dict, stored_outputs dict or None)
+    """
+    refined_results = {}
+    stored_outputs = {} if store_outputs else None
+    num_samples = len(test_dataset)
+    
+    if console:
+        console.print(f"[yellow]Processing {num_samples} images...[/yellow]")
+    
+    for i in range(num_samples):
+        if console:
+            console.print(f"[cyan]Refining image {i+1}/{num_samples}...[/cyan]", end="\r")
+        
+        fbp_input, original_image = test_dataset[i]
+        fbp_input_batch = fbp_input.unsqueeze(0).to(device)
+        
+        with torch.inference_mode():
+            # Get model output
+            model_output = model_instance(fbp_input_batch)
+            
+            # Apply refining
+            refined_output_np = refining_model(initial_image=model_output)
+            
+            # Convert to tensor
+            refined_output = torch.from_numpy(refined_output_np).unsqueeze(0).unsqueeze(0).to(device)
+            
+            # Compute metrics
+            mse = torch.nn.functional.mse_loss(refined_output, original_image.unsqueeze(0).to(device)).item()
+            psnr = 10 * np.log10(1.0 / mse) if mse > 0 else float('inf')
+            
+            # Compute SSIM
+            from skimage.metrics import structural_similarity as ssim
+            refined_np = refined_output.squeeze().cpu().numpy()
+            original_np = original_image.numpy()
+            
+            # Ensure both arrays are 2D and have the same shape
+            if refined_np.ndim != 2:
+                refined_np = refined_np.squeeze()
+            if original_np.ndim != 2:
+                original_np = original_np.squeeze()
+            
+            # If shapes still don't match, skip SSIM calculation
+            if refined_np.shape != original_np.shape:
+                ssim_val = 0.0
+            else:
+                # Ensure images are in the same range
+                data_range = original_np.max() - original_np.min()
+                if data_range == 0:
+                    data_range = 1.0
+                
+                ssim_val = ssim(refined_np, original_np, data_range=data_range)
+            
+            refined_results[i] = {
+                'mse': mse,
+                'psnr': psnr,
+                'ssim': ssim_val
+            }
+            
+            # Store outputs if requested
+            if store_outputs:
+                stored_outputs[i] = {
+                    'fbp_input': fbp_input,
+                    'original_image': original_image,
+                    'model_output': model_output.detach().cpu(),
+                    'refined_output': refined_output.detach().cpu(),
+                    'sinogram': None
+                }
+        
+        # Clear GPU cache periodically
+        if i % 10 == 0:
+            torch.cuda.empty_cache()
+    
+    # Final cache clear
+    torch.cuda.empty_cache()
+    
+    if console:
+        console.print("\n")
+    
+    return refined_results, stored_outputs
+
+
+def compute_refining_metrics(refined_results, pre_refining_metrics):
+    """
+    Compute aggregated metrics and improvements from refining results.
+    
+    Args:
+        refined_results: Dictionary with per-sample refined metrics
+        pre_refining_metrics: Dictionary with pre-refining metrics (must have 'loss' and 'psnr')
+        
+    Returns:
+        dict: Aggregated metrics with improvements
+    """
+    avg_refined_mse = np.mean([v['mse'] for v in refined_results.values()])
+    avg_refined_psnr = np.mean([v['psnr'] for v in refined_results.values()])
+    
+    mse_improvement = pre_refining_metrics['loss'] - avg_refined_mse
+    psnr_improvement = avg_refined_psnr - pre_refining_metrics['psnr']
+    mse_percent = (mse_improvement / pre_refining_metrics['loss'] * 100) if pre_refining_metrics['loss'] > 0 else 0
+    
+    return {
+        'mse': avg_refined_mse,
+        'psnr': avg_refined_psnr,
+        'mse_improvement': mse_improvement,
+        'psnr_improvement': psnr_improvement,
+        'mse_improvement_percent': mse_percent
+    }
+
+
+def store_model_outputs(model_instance, test_dataset, device):
+    """
+    Store model outputs for visualization (without refining).
+    
+    Args:
+        model_instance: The trained model
+        test_dataset: The test dataset
+        device: The device to run on
+        
+    Returns:
+        dict: Stored outputs for each sample
+    """
+    stored_outputs = {}
+    
+    with torch.inference_mode():
+        for i in range(len(test_dataset)):
+            fbp_input, original_image = test_dataset[i]
+            fbp_input_batch = fbp_input.unsqueeze(0).to(device)
+            model_output = model_instance(fbp_input_batch)
+            
+            stored_outputs[i] = {
+                'fbp_input': fbp_input,
+                'original_image': original_image,
+                'model_output': model_output.detach().cpu(),
+                'refined_output': None,
+                'sinogram': None
+            }
+            
+            # Clear GPU cache periodically
+            if i % 10 == 0:
+                torch.cuda.empty_cache()
+    
+    # Final cache clear
+    torch.cuda.empty_cache()
+    
+    return stored_outputs
+    
     

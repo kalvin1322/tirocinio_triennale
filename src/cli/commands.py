@@ -6,6 +6,7 @@ import sys
 import csv
 import json
 import re
+import click
 import numpy as np
 from pathlib import Path
 from rich.console import Console
@@ -17,12 +18,14 @@ from torch.utils.data import DataLoader
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
-from src.utils.train_test import train_step, test_step, save_model, save_test_results, save_visualization_plots
+from src.utils.train_test import (train_step, test_step, save_model, save_test_results, 
+                                   save_visualization_plots, apply_refining_to_dataset,
+                                   compute_refining_metrics, store_model_outputs)
 from src.dataloader.CTDataloader import CTDataset
 from src.utils.utilities import astra_projection
 from src.utils.postprocessing_registry import get_postprocessing_model, list_postprocessing_models
 from src.utils.model_params import build_model_params, validate_param, get_model_filename
-
+from src.utils.refining_registry import get_refining_method, get_all_refining_methods
 console = Console()
 
 
@@ -141,7 +144,7 @@ def train_cmd(preprocessing: str, postprocessing: str, dataset: str, epochs: int
 
 
 def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_name: str = None, 
-             visualize: bool = False, num_samples: int = 5):
+             visualize: bool = False, num_samples: int = 5, refining: str = None):
     """Test a trained model"""
     console.print(f"\n[bold blue]Starting Testing[/bold blue]")
     if experiment_name:
@@ -187,7 +190,7 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
     
     # Load checkpoint
     try:
-        model_instance.load_state_dict(torch.load(checkpoint))
+        model_instance.load_state_dict(torch.load(checkpoint, weights_only=True))
         model_instance.to(device)
         model_instance.eval()
         console.print(f"[green]✓ Model loaded successfully[/green]\n")
@@ -212,6 +215,48 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
         device=device
     )
     
+    # Display pre-refining metrics
+    console.print("\n[bold cyan]═══ Pre-Refining Metrics ═══[/bold cyan]")
+    console.print(f"Average MSE:  {test_results['loss']:.6f}")
+    console.print(f"Average PSNR: {test_results['psnr']:.2f} dB")
+    
+    # Refining process
+    if refining != None and refining != 'SKIP':
+        console.print(f"\n[cyan]Applying refining model: {refining}...[/cyan]\n")
+        refining_model = get_refining_method(refining)
+        if refining_model is None:
+            return
+        
+        # Apply refining using utility function
+        refined_results, stored_outputs = apply_refining_to_dataset(
+            model_instance=model_instance,
+            refining_model=refining_model,
+            test_dataset=test_dataset,
+            device=device,
+            store_outputs=True,
+            console=console
+        )
+        
+        # Compute metrics using utility function
+        refining_metrics = compute_refining_metrics(refined_results, test_results)
+        
+        # Display post-refining metrics
+        console.print(f"[green]✓ Refining completed![/green]\n")
+        console.print("[bold cyan]═══ Post-Refining Metrics ═══[/bold cyan]")
+        console.print(f"Average MSE:  {refining_metrics['mse']:.6f} (Δ {refining_metrics['mse_improvement']:+.6f})")
+        console.print(f"Average PSNR: {refining_metrics['psnr']:.2f} dB (Δ {refining_metrics['psnr_improvement']:+.2f} dB)")
+        
+        # Show improvement summary
+        console.print("\n[bold yellow]═══ Improvement Summary ═══[/bold yellow]")
+        console.print(f"MSE improved by:  {refining_metrics['mse_improvement_percent']:+.2f}%")
+        console.print(f"PSNR improved by: {refining_metrics['psnr_improvement']:+.2f} dB\n")
+        
+        # Update test_results with refined metrics
+        test_results.update(refining_metrics)
+    else:
+        # No refining - just store model outputs for visualization
+        stored_outputs = store_model_outputs(model_instance, test_dataset, device)
+    
     # Save results to JSON using utility function
     results_file = save_test_results(
         model_instance=model_instance,
@@ -228,51 +273,67 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
     
     # Generate visualization plots if requested
     if visualize:
-        console.print(f"\n[cyan]Generating visualization plots for {num_samples} samples...[/cyan]")
+        # Use num_samples parameter to determine how many plots to create
+        max_viz_samples = min(num_samples, len(stored_outputs))
+        console.print(f"\n[cyan]Generating visualization plots for {max_viz_samples} samples...[/cyan]")
         
-        # Get a few samples from the dataset for visualization
-        model_instance.eval()
-        with torch.inference_mode():
-            for i in range(min(num_samples, len(test_dataset))):
-                # Get original image and create visualization
-                fbp_input, original_image = test_dataset[i]
-                
-                # Move to device and add batch dimension
-                fbp_input_batch = fbp_input.unsqueeze(0).to(device)
-                
-                # Get model prediction
-                model_output = model_instance(fbp_input_batch)
-                
-                # Recreate sinogram from original image for visualization
+        # Use stored outputs (already calculated - no recalculation needed!)
+        for i in range(max_viz_samples):
+            console.print(f"[yellow]Creating plot {i+1}/{max_viz_samples}...[/yellow]", end="\r")
+            
+            # Get stored data
+            data = stored_outputs[i]
+            fbp_input = data['fbp_input']
+            original_image = data['original_image']
+            model_output = data['model_output']
+            refined_output = data['refined_output']  # Will be None if no refining was done
+            
+            # Create sinogram only for visualization (lazy creation)
+            try:
                 sinogram = astra_projection(original_image)
-                
-                # Save visualization
-                save_visualization_plots(
-                    original_image=original_image,
-                    sinogram=sinogram,
-                    fbp_reconstruction=fbp_input.cpu().numpy().squeeze(),
-                    model_output=model_output.cpu(),
-                    output_dir=output,
-                    model_name=model,
-                    sample_idx=i
-                )
+            except Exception as e:
+                console.print(f"\n[yellow]Warning: Could not create sinogram for sample {i}: {e}[/yellow]")
+                # Use a placeholder if sinogram creation fails
+                sinogram = np.zeros((180, 512), dtype=np.float32)
+            
+            # Save visualization (with or without refining based on refined_output)
+            save_visualization_plots(
+                original_image=original_image,
+                sinogram=sinogram,
+                fbp_reconstruction=fbp_input.numpy().squeeze(),  # Already on CPU
+                model_output=model_output,  # Already on CPU
+                refined_output=refined_output,  # None if no refining, otherwise refined image
+                output_dir=output,
+                model_name=model,
+                sample_idx=i
+            )
         
-        console.print(f"[green]✓ Visualization plots saved to: {output}/plots/[/green]")
+        console.print(f"\n[green]✓ Visualization plots saved to: {output}/plots/[/green]")
     
     console.print(f"\n[bold green]✓ Testing completed![/bold green]")
     console.print(f"[cyan]Results saved to: {results_file}[/cyan]\n")
 
 
-def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: str, 
-                 output: str, geometry_config: str = "default"):
+def benchmark_cmd(experiment_id, preprocessing, postprocessing, refining=None, dataset="data/Mayo_s Dataset/test", 
+                  geometry_config="default", output=None):
     """Benchmark multiple preprocessing-postprocessing combinations including parameter variants"""
+    
+    # Setup output directory
+    experiment_dir = Path("experiments") / f"experiment_{experiment_id}"
+    if not experiment_dir.exists():
+        console.print(f"[red]Experiment not found: {experiment_id}[/red]")
+        return
+    
+    if output is None:
+        output = str(experiment_dir / "benchmarks")
+    
     console.print(f"\n[bold magenta]Starting Benchmark[/bold magenta]")
     console.print(f"Preprocessing methods: {', '.join(preprocessing)}")
     console.print(f"Post-processing models: {', '.join(postprocessing)}")
     console.print(f"Dataset: {dataset}\n")
     
     # Find all trained models in the models directory
-    models_dir = Path(output).parent / "trained_models"
+    models_dir = experiment_dir / "trained_models"
     if not models_dir.exists():
         console.print(f"[red]Models directory not found: {models_dir}[/red]")
         return
@@ -307,6 +368,14 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
         console.print(f"  • {checkpoint_name}")
     console.print()
     
+    # Process refining methods
+    refining_methods = list(refining) if refining else []
+    if refining_methods:
+        console.print(f"[green]Refining methods to test:[/green]")
+        for method in refining_methods:
+            console.print(f"  • {method}")
+        console.print()
+    
     results = []
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     
@@ -334,7 +403,7 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
             if model_instance is None:
                 continue
             
-            model_instance.load_state_dict(torch.load(checkpoint_path, map_location=device))
+            model_instance.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
             model_instance.to(device)
             model_instance.eval()
             
@@ -342,22 +411,87 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
             test_dataset = CTDataset(image_path=dataset, geometry_config=geometry_config)
             test_dataloader = DataLoader(test_dataset, batch_size=1, shuffle=False)
             
-            # Run test and collect metrics
+            # Run test and collect metrics (without refining)
             loss_fn = torch.nn.L1Loss() if 'UNet' in postp else torch.nn.MSELoss()
             metrics = test_step(model_instance, test_dataloader, loss_fn, device)
             
-            results.append({
-                'model_full_name': checkpoint_name,  # Full model name with all parameters
+            # Store baseline results (without refining)
+            baseline_result = {
+                'model_full_name': checkpoint_name,
                 'preprocessing': prep,
                 'postprocessing': postp,
+                'refining': 'none',
                 'checkpoint': f"{checkpoint_name}.pth",
                 'psnr': metrics.get('psnr', 0.0),
                 'ssim': metrics.get('ssim', 0.0),
                 'mse': metrics.get('mse', 0.0),
-                'test_loss': metrics.get('loss', 0.0)  # test_step returns 'loss', not 'test_loss'
-            })
+                'test_loss': metrics.get('loss', 0.0)
+            }
+            results.append(baseline_result)
             
-            console.print(f"  [green]PSNR: {metrics.get('psnr', 0):.2f} dB | SSIM: {metrics.get('ssim', 0):.4f} | MSE: {metrics.get('mse', 0):.6f}[/green]")
+            console.print(f"  [green]Baseline - PSNR: {metrics.get('psnr', 0):.2f} dB | SSIM: {metrics.get('ssim', 0):.4f} | MSE: {metrics.get('mse', 0):.6f}[/green]")
+            
+            # Test with refining methods if requested
+            if refining_methods:
+                for refining_method in refining_methods:
+                    if refining_method.lower() == 'none':
+                        continue
+                        
+                    console.print(f"  [cyan]Testing with {refining_method} refining...[/cyan]")
+                    
+                    try:
+                        # Get refining model from registry
+                        refining_model = get_refining_method(refining_method)
+                        if refining_model is None:
+                            console.print(f"    [red]Refining method {refining_method} not found[/red]")
+                            continue
+                        
+                        # Apply refining and compute metrics
+                        refined_results, _ = apply_refining_to_dataset(
+                            model_instance=model_instance,
+                            refining_model=refining_model,
+                            test_dataset=test_dataset,
+                            device=device,
+                            store_outputs=False  # Don't store outputs in benchmark
+                        )
+                        
+                        # Compute aggregated metrics (compute_refining_metrics needs pre_refining_metrics)
+                        # Calculate averages manually
+                        avg_refined_mse = np.mean([v['mse'] for v in refined_results.values()])
+                        avg_refined_psnr = np.mean([v['psnr'] for v in refined_results.values()])
+                        avg_refined_ssim = np.mean([v['ssim'] for v in refined_results.values()])
+                        
+                        # Calculate improvements
+                        mse_improvement = metrics.get('mse', 0.0) - avg_refined_mse
+                        psnr_improvement = avg_refined_psnr - metrics.get('psnr', 0.0)
+                        ssim_improvement = avg_refined_ssim - metrics.get('ssim', 0.0)
+                        
+                        # Store refining results
+                        refining_result = {
+                            'model_full_name': checkpoint_name,
+                            'preprocessing': prep,
+                            'postprocessing': postp,
+                            'refining': refining_method,
+                            'checkpoint': f"{checkpoint_name}.pth",
+                            'psnr': avg_refined_psnr,
+                            'ssim': avg_refined_ssim,
+                            'mse': avg_refined_mse,
+                            'test_loss': avg_refined_mse,
+                            'psnr_improvement': psnr_improvement,
+                            'mse_improvement': mse_improvement,
+                            'ssim_improvement': ssim_improvement
+                        }
+                        results.append(refining_result)
+                        
+                        console.print(f"    [green]{refining_method} - PSNR: {avg_refined_psnr:.2f} dB "
+                                    f"(+{psnr_improvement:.2f}) | "
+                                    f"SSIM: {avg_refined_ssim:.4f} | "
+                                    f"MSE: {avg_refined_mse:.6f} "
+                                    f"({mse_improvement:+.6f})[/green]")
+                        
+                    except Exception as e:
+                        console.print(f"    [red]Error applying {refining_method}: {e}[/red]")
+                        continue
             
         except Exception as e:
             console.print(f"[red]Error testing {prep} → {postp}: {e}[/red]")
@@ -367,23 +501,43 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
     if results:
         table = Table(title="Benchmark Results - All Model Variants")
         table.add_column("Model", style="cyan", no_wrap=True)
+        table.add_column("Refining", style="magenta", no_wrap=True)
         table.add_column("PSNR (dB)", style="yellow", justify="right")
         table.add_column("SSIM", style="yellow", justify="right")
         table.add_column("MSE", style="yellow", justify="right")
+        if refining_methods:
+            table.add_column("PSNR Δ", style="green", justify="right")
+            table.add_column("SSIM Δ", style="green", justify="right")
+            table.add_column("MSE Δ", style="green", justify="right")
         
         for result in results:
-            # Show full model name with parameters
-            table.add_row(
+            row = [
                 result['model_full_name'],
+                result['refining'],
                 f"{result['psnr']:.2f}",
                 f"{result['ssim']:.4f}",
                 f"{result['mse']:.6f}"
-            )
+            ]
+            
+            # Add improvement columns if refining was used
+            if refining_methods:
+                if result['refining'] != 'none':
+                    row.append(f"+{result.get('psnr_improvement', 0):.2f}")
+                    row.append(f"{result.get('ssim_improvement', 0):+.4f}")
+                    # MSE improvement is positive when MSE decreases (improvement)
+                    mse_imp = result.get('mse_improvement', 0)
+                    row.append(f"{mse_imp:+.6f}")
+                else:
+                    row.append("-")
+                    row.append("-")
+                    row.append("-")
+            
+            table.add_row(*row)
         
         console.print("\n")
         console.print(table)
         
-        # Save results to CSV
+        # Save results to files
         output_path = Path(output)
         output_path.mkdir(parents=True, exist_ok=True)
         
@@ -393,7 +547,11 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
         
         # Save CSV
         with open(csv_filename, 'w', newline='', encoding='utf-8') as csvfile:
-            fieldnames = ['model_full_name', 'preprocessing', 'postprocessing', 'checkpoint', 'psnr', 'ssim', 'mse', 'test_loss']
+            fieldnames = ['model_full_name', 'preprocessing', 'postprocessing', 'refining', 'checkpoint', 
+                         'psnr', 'ssim', 'mse', 'test_loss']
+            if refining_methods:
+                fieldnames.extend(['psnr_improvement', 'mse_improvement', 'ssim_improvement'])
+            
             writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
             
             writer.writeheader()
@@ -404,8 +562,9 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
         benchmark_data = {
             'timestamp': timestamp,
             'date': datetime.now().isoformat(),
-            'preprocessing_methods': preprocessing,
-            'postprocessing_models': postprocessing,
+            'preprocessing_methods': list(preprocessing),
+            'postprocessing_models': list(postprocessing),
+            'refining_methods': refining_methods if refining_methods else ['none'],
             'dataset': dataset,
             'total_models_found': len(matching_checkpoints),
             'successful_tests': len(results),
@@ -422,3 +581,25 @@ def benchmark_cmd(preprocessing: list[str], postprocessing: list[str], dataset: 
         console.print(f"  • JSON: {json_filename}\n")
     else:
         console.print("\n[yellow]No combinations could be tested. Please train models first.[/yellow]\n")
+
+
+# CLI wrapper for benchmark_cmd
+@click.command(name="benchmark")
+@click.option('--experiment-id', required=True, help='Experiment ID to use')
+@click.option('--preprocessing', multiple=True, help='Preprocessing methods to test (can specify multiple)')
+@click.option('--postprocessing', multiple=True, help='Postprocessing models to test (can specify multiple)')
+@click.option('--refining', multiple=True, help='Refining methods to apply after model (can specify multiple: FISTA_TV, CHAMBOLLE_POCK, ADMM_TV)')
+@click.option('--dataset', default="data/Mayo_s Dataset/test", help='Path to test dataset')
+@click.option('--geometry-config', default="default", help='Geometry configuration name (e.g., default, high_resolution)')
+@click.option('--output', default=None, help='Output directory for results (default: <experiment_dir>/benchmarks)')
+def benchmark_cli(experiment_id, preprocessing, postprocessing, refining, dataset, geometry_config, output):
+    """CLI wrapper for benchmark command"""
+    benchmark_cmd(
+        experiment_id=experiment_id,
+        preprocessing=preprocessing,
+        postprocessing=postprocessing,
+        refining=refining if refining else None,
+        dataset=dataset,
+        geometry_config=geometry_config,
+        output=output
+    )

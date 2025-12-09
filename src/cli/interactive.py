@@ -10,11 +10,10 @@ from datetime import datetime
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-
+from .commands import train_cmd
 # Add parent directory to path for imports
 sys.path.append(str(Path(__file__).parent.parent))
-from utils.models_config import (get_preprocessing_models, get_postprocessing_models, 
-                                 get_preprocessing_info, get_postprocessing_info)
+from utils.models_config import get_preprocessing_models, get_postprocessing_models, get_preprocessing_info, get_refining_models, get_postprocessing_info
 from utils.model_params import get_tunable_params, get_default_params
 from .wizard import run_wizard
 from .commands import test_cmd
@@ -410,7 +409,7 @@ def train_interactive(experiment_config):
             console.print(f"[dim]Configuration saved to: {config_path}[/dim]\n")
             
             # Start training
-            from .commands import train_cmd
+            
             output_dir = experiment_config['output_dirs']['models']
             
             # Prepare train_cmd arguments
@@ -488,6 +487,24 @@ def test_interactive(experiment_config):
     if not answers or answers.get('checkpoint') == 'BACK':
         return
     
+    # Ask about refining
+    refining_models = get_refining_models()
+    refining_choices = [('Skip Refining', 'SKIP')] + refining_models
+    
+    refining_question = [
+        inquirer.List(
+            'refining',
+            message="Select refining method (optional)",
+            choices=refining_choices
+        )
+    ]
+    refining_answer = inquirer.prompt(refining_question)
+    if refining_answer:
+        # Set to None if SKIP was selected
+        answers['refining'] = None if refining_answer.get('refining') == 'SKIP' else refining_answer.get('refining')
+    else:
+        answers['refining'] = None
+    
     # Ask for visualization options
     viz_questions = [
         inquirer.Confirm(
@@ -497,7 +514,6 @@ def test_interactive(experiment_config):
         ),
     ]
     viz_answers = inquirer.prompt(viz_questions)
-    
     # Merge the answers
     if viz_answers:
         answers.update(viz_answers)
@@ -522,7 +538,6 @@ def test_interactive(experiment_config):
         # Extract base model name (without parameters)
         # Need to handle multi-part model names like "UNet_V1"
         # Strategy: Remove preprocessing prefix, then find registered model name
-        from utils.models_config import get_postprocessing_models
         registered_models = get_postprocessing_models()
         
         # Remove preprocessing prefix (FBP_, SART_, SIRT_)
@@ -557,7 +572,8 @@ def test_interactive(experiment_config):
             output=experiment_config['output_dirs']['results'],
             experiment_name=experiment_config['experiment']['name'],
             visualize=answers.get('visualize', False),
-            num_samples=num_samples
+            num_samples=num_samples,
+            refining=answers.get('refining', None)
         )
         
         console.input("\n[dim]Press Enter to continue...[/dim]")
@@ -639,10 +655,29 @@ def benchmark_interactive(experiment_config):
             console.input("\n[dim]Press Enter to continue...[/dim]")
             return
         
+        # Ask about refining methods
+        refining_models = get_refining_models()
+        if refining_models:
+            refining_question = [
+                inquirer.Checkbox(
+                    'refining',
+                    message="Select refining methods to test (optional, Space to select, Enter to confirm)",
+                    choices=refining_models,
+                )
+            ]
+            refining_answer = inquirer.prompt(refining_question)
+            refining_methods = refining_answer.get('refining', []) if refining_answer else []
+        else:
+            refining_methods = []
+        
         # Show summary
         console.print(f"\n[cyan]Benchmark Configuration:[/cyan]")
         console.print(f"  Preprocessing: {', '.join(prep_models)}")
         console.print(f"  Post-processing: {', '.join(postp_models)}")
+        if refining_methods:
+            console.print(f"  Refining: {', '.join(refining_methods)}")
+        else:
+            console.print(f"  Refining: [dim]None[/dim]")
         
         # Find actual trained models to show what will be tested
         models_dir = Path(experiment_config['output_dirs']['models'])
@@ -680,10 +715,17 @@ def benchmark_interactive(experiment_config):
             from .commands import benchmark_cmd
             # Use test dataset from experiment config
             test_dataset = experiment_config['datasets']['test']
+            
+            # Extract experiment ID from the experiment config (use timestamp as ID)
+            experiment_id = experiment_config['experiment']['timestamp']
+            
             benchmark_cmd(
+                experiment_id=experiment_id,
                 preprocessing=prep_models,
                 postprocessing=postp_models,
+                refining=refining_methods if refining_methods else [],
                 dataset=test_dataset,
+                geometry_config='default',
                 output=experiment_config['output_dirs']['benchmarks']
             )
             

@@ -12,7 +12,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from utils.utilities import astra_projection
 from utils.geometry_config import load_projection_geometry
 from utils.preprocessing_registry import get_preprocessing_method, list_preprocessing_methods
-
+from utils.utilities import gaussian_noise
 
 class CTDataset(Dataset):
     def __init__(self, image_path: str, preprocessing_method: str = "FBP", 
@@ -70,17 +70,31 @@ class CTDataset(Dataset):
         # Create sinogram from original image
         sinogram = astra_projection(original_image_tensor)
         
+        # Apply noise
+        noise = gaussian_noise(torch.from_numpy(sinogram), noise_level="0.01")
+        sinogram_noisy = sinogram + noise.numpy()
+        
         # Create ASTRA sinogram data structure
-        sinogram_id = astra.data2d.create('-sino', self.proj_geom, data=sinogram)
+        sinogram_id = astra.data2d.create('-sino', self.proj_geom, data=sinogram_noisy)
         
         try:
-            # Perform reconstruction using registered preprocessing method
             # The preprocessing_func is retrieved from the registry during __init__
             reconstruction = self.preprocessing_func(
                 vol_geom=self.vol_geom,
                 sinogram_id=sinogram_id,
                 **self.preprocessing_params  # Pass all parameters dynamically
             )
+            
+            # Perform reconstruction using registered preprocessing method
+            # Normalization
+            rec_min = reconstruction.min()
+            rec_max = reconstruction.max()
+            
+            if rec_max - rec_min != 0:
+                reconstruction = (reconstruction - rec_min) / (rec_max - rec_min)
+            else:
+                reconstruction = np.zeros_like(reconstruction)
+
 
             preprocessed_image_tensor = self.to_tensor(reconstruction.astype(np.float32))
             

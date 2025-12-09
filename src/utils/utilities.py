@@ -116,3 +116,13 @@ def print_train_time(start: float,
     total_time = end-start
     print(f"Train time on {device}: {total_time:.3f} seconds")
     return total_time
+
+def gaussian_noise(y: torch.Tensor, noise_level: str) -> torch.Tensor:
+    r"""
+    Returns a data-dependent sample of gaussian noise "e", with norm equal ||e|| = noise_level * || y ||.
+
+    :param torch.Tensor y: The corrupted data y = Kx.
+    :param str noise_level: The noise level.
+    """
+    e = torch.randn_like(y)
+    return e / torch.norm(e) * torch.norm(y) * float(noise_level)

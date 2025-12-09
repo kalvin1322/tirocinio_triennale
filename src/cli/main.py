@@ -8,7 +8,7 @@ from rich.panel import Panel
 from pathlib import Path
 
 from .interactive import run_interactive_mode
-from .commands import train_cmd, test_cmd, benchmark_cmd
+from .commands import train_cmd, test_cmd, benchmark_cmd, benchmark_cli
 from .wizard import create_experiment_non_interactive, run_wizard
 from src.utils.model_params import validate_param
 from src.utils.models_config import get_postprocessing_models
@@ -247,7 +247,8 @@ def create_experiment(
 def benchmark(
     experiment: str = typer.Option(None, "--experiment", "-e", help="Experiment name (uses .current_experiment if not specified)"),
     preprocessing: str = typer.Option("FBP", "--preprocessing", "-pre", help="Preprocessing methods (comma-separated or single)"),
-    postprocessing: str = typer.Option(..., "--postprocessing", "-post", help="Postprocessing models to compare (comma-separated, e.g., 'UNet_V1,ThreeL_SSNet')")
+    postprocessing: str = typer.Option(..., "--postprocessing", "-post", help="Postprocessing models to compare (comma-separated, e.g., 'UNet_V1,ThreeL_SSNet')"),
+    refining: str = typer.Option(None, "--refining", "-ref", help="Refining methods to apply (comma-separated, e.g., 'FISTA_TV,CHAMBOLLE_POCK,ADMM_TV')")
 ):
     """
     📊 Benchmark multiple models
@@ -255,6 +256,9 @@ def benchmark(
     Examples:
       # Compare two models
       python main.py benchmark --postprocessing UNet_V1,ThreeL_SSNet
+      
+      # Benchmark with refining
+      python main.py benchmark --postprocessing UNet_V1,ThreeL_SSNet --refining FISTA_TV,CHAMBOLLE_POCK
       
       # Benchmark specific experiment
       python main.py benchmark -e my_experiment --postprocessing UNet_V1,ThreeL_SSNet
@@ -278,11 +282,20 @@ def benchmark(
     preprocessing_list = [p.strip() for p in preprocessing.split(',')]
     postprocessing_list = [p.strip() for p in postprocessing.split(',')]
     
+    # Parse refining methods (optional)
+    refining_list = [r.strip() for r in refining.split(',')] if refining else []
+    
+    # Extract experiment ID (timestamp)
+    experiment_id = exp_config['experiment']['timestamp']
+    
     # Call benchmark command
     benchmark_cmd(
+        experiment_id=experiment_id,
         preprocessing=preprocessing_list,
         postprocessing=postprocessing_list,
+        refining=refining_list if refining_list else None,
         dataset=exp_config['datasets']['test'],
+        geometry_config='default',
         output=exp_config['output_dirs']['benchmarks']
     )
 
