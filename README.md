@@ -262,4 +262,5 @@ They must be set in `configs/models_config.json` before training. See [Model Con
 - **[projection_geometry_guide](docs/projection_geometry_guide.md)** - Guide for CT machine configuratio
 - **[Adding Pre-processing method](docs/ADDING_PREPROCESSING_METHODS.md)** -  Guide to add pre-processing methods
 - **[Adding Custom Dataset](data/README.md)** - Guide to add custom dataset
+- **[Adding Custom Refining Method](docs/REFINING_GUIDE.md) - Guide to add custom refining method
 

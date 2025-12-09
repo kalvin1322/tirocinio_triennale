@@ -57,22 +57,13 @@ The following TV-based refining methods are currently available:
 #### Testing with Refining
 ```bash
 # Test a single model with refining
-python run.py test \
-  --model UNet_V1 \
-  --checkpoint experiments/my_exp/trained_models/FBP_UNet_V1.pth \
-  --refining FISTA_TV \
-  --visualize \
-  --num-samples 10
+python run.py test --model UNet_V1 --checkpoint experiments/my_exp/trained_models/FBP_UNet_V1.pth --refining FISTA_TV --visualize --num-samples 10
 ```
 
 #### Benchmark with Refining
 ```bash
 # Compare multiple models with multiple refining methods
-python run.py benchmark \
-  --experiment-id 20251111_115226 \
-  --preprocessing FBP SART \
-  --postprocessing UNet_V1 PostProcessNet \
-  --refining FISTA_TV CHAMBOLLE_POCK ADMM_TV
+python run.py benchmark --experiment-id 20251111_115226 --preprocessing FBP,SART --postprocessing UNet_V1,PostProcessNet --refining FISTA_TV,CHAMBOLLE_POCK,ADMM_TV
 ```
 
 This will test:
@@ -83,7 +74,7 @@ This will test:
 ### Interactive Mode
 
 ```bash
-python run.py
+python run.py interactive
 # Select "Test" or "Benchmark"
 # You'll be prompted to select refining methods
 ```
@@ -114,17 +105,6 @@ refined_results, stored_outputs = apply_refining_to_dataset(
     store_outputs=True
 )
 ```
-
-### Expected Results
-
-Refining typically improves:
-- **PSNR**: +0.5 to +2.5 dB improvement
-- **MSE**: 10-30% reduction
-- **SSIM**: Minimal change (0.00 to +0.01)
-
-TV denoising primarily reduces noise and smooths regions while preserving edges, which improves PSNR/MSE more than SSIM.
-
----
 
 ## Adding New Refining Methods
 
@@ -182,34 +162,33 @@ def run_my_refining(initial_image=None, param1=0.1, param2=50):
 
 ### Step 2: Register the Method
 
-Edit `src/utils/refining_registry.py`:
+Edit `src/utils/refining_registry.py` to add your method using the `@register_refining` decorator:
 
 ```python
 from src.models.my_refining_method import run_my_refining
 
-# Add to imports section
+# Add to the end of the file, after existing registrations
 
-def my_refining_wrapper(iterations=50, lambda_tv=0.1, initial_image=None):
+@register_refining("MY_REFINING")
+def my_refining_wrapper(param1=0.1, param2=50, **kwargs):
     """
     Wrapper for My Refining method.
     Adapts custom parameters to standard interface.
     """
     return run_my_refining(
-        initial_image=initial_image,
-        param1=lambda_tv,  # Map standard parameter
-        param2=iterations   # Map standard parameter
+        param1=param1,
+        param2=param2,
+        **kwargs
     )
-
-# Register in the dictionary
-REFINING_METHODS = {
-    'FISTA_TV': fista_tv_wrapper,
-    'CHAMBOLLE_POCK': chambolle_pock_wrapper,
-    'ADMM_TV': admm_tv_wrapper,
-    'MY_REFINING': my_refining_wrapper,  # Add your method
-}
 ```
 
-### Step 3: Update Configuration (Optional)
+**Key points**:
+- Use `@register_refining("METHOD_NAME")` decorator above your wrapper function
+- Method name will be automatically converted to uppercase in the registry
+- The wrapper function must accept `**kwargs` to handle any additional parameters
+- Your method is now automatically available in the refining registry
+
+### Step 3: Update Configuration
 
 Edit `configs/models_config.json` to add metadata:
 
@@ -232,16 +211,7 @@ Edit `configs/models_config.json` to add metadata:
 
 ```bash
 # Test with CLI
-python run.py test \
-  --model UNet_V1 \
-  --checkpoint path/to/model.pth \
-  --refining MY_REFINING
-
-# Or use Python API
-from src.utils.refining_registry import get_refining_method
-
-method = get_refining_method('MY_REFINING')
-refined = method(initial_image=model_output)
+python run.py test --model UNet_V1 --checkpoint path/to/model.pth --refining MY_REFINING
 ```
 
 ---
@@ -292,11 +262,7 @@ def run_fista_tv_reconstruction(sinogram=None, geometry_config=None,
 **Testing after modifications**:
 ```bash
 # Always test on a small dataset first
-python run.py test \
-  --model SimpleResNet \
-  --checkpoint path/to/checkpoint.pth \
-  --refining FISTA_TV \
-  --num-samples 5
+python run.py test --model SimpleResNet --checkpoint path/to/checkpoint.pth --refining FISTA_TV --num-samples 5
 ```
 
 ---
@@ -344,216 +310,5 @@ For each refining method, the system tracks:
 
 ---
 
-## Best Practices
-
-### 1. Parameter Tuning
-
-**Lambda (λ_tv)** - Regularization strength:
-- **Low (0.01-0.05)**: Minimal smoothing, preserves details
-- **Medium (0.1-0.2)**: Balanced noise reduction
-- **High (0.5-1.0)**: Aggressive smoothing, may blur edges
-
-**Iterations**:
-- **10-30**: Fast, good for testing
-- **50-100**: Standard, good quality
-- **100+**: Diminishing returns, slower
-
-**Recommendation**: Start with defaults, then tune based on your data.
-
-### 2. When to Use Refining
-
-✅ **Use refining when**:
-- Model output has residual noise
-- You need extra 0.5-2 dB PSNR improvement
-- Edges need better preservation
-- You have computational budget for post-processing
-
-❌ **Skip refining when**:
-- Model already produces clean output (high PSNR >30 dB)
-- Real-time processing is critical
-- SSIM is more important than PSNR
-
-### 3. Benchmarking Strategy
-
-```bash
-# Test baseline first
-python run.py benchmark \
-  --preprocessing FBP \
-  --postprocessing UNet_V1
-
-# Then add refining to best models
-python run.py benchmark \
-  --preprocessing FBP \
-  --postprocessing UNet_V1 \
-  --refining FISTA_TV CHAMBOLLE_POCK
-```
-
-### 4. Combining Methods
-
-You can chain preprocessing → model → refining:
-
-```
-FBP → UNet_V1 → FISTA_TV
-SART → PostProcessNet → CHAMBOLLE_POCK
-ADMM_TV → SimpleResNet → ADMM_TV (double TV)
-```
-
-### 5. Debugging
-
-If refining fails:
-1. Check input dimensions: `print(initial_image.shape)`
-2. Verify data range: `print(initial_image.min(), initial_image.max())`
-3. Test on single image first
-4. Check error logs for tensor/numpy conversion issues
-
-**Common issues**:
-- Dimension mismatch → Check squeeze/unsqueeze
-- SSIM calculation error → Images have different shapes
-- Slow performance → Reduce iterations or use FISTA_TV
-
----
-
-## Example Workflows
-
-### Workflow 1: Quick Test
-```bash
-# Test single model with one refining method
-python run.py test \
-  --model UNet_V1 \
-  --checkpoint trained_models/FBP_UNet_V1.pth \
-  --refining FISTA_TV \
-  --visualize
-```
-
-### Workflow 2: Comprehensive Benchmark
-```bash
-# Compare all preprocessing + models + refining combinations
-python run.py benchmark \
-  --experiment-id 20251111_115226 \
-  --preprocessing FBP SART SIRT \
-  --postprocessing UNet_V1 PostProcessNet SimpleResNet \
-  --refining FISTA_TV CHAMBOLLE_POCK ADMM_TV
-```
-
-This generates a table like:
-```
-Model                           | Refining       | PSNR  | SSIM  | MSE    | PSNR Δ | SSIM Δ  | MSE Δ
-FBP_UNet_V1                    | none           | 18.50 | 0.305 | 0.0173 | -      | -       | -
-FBP_UNet_V1                    | FISTA_TV       | 19.79 | 0.305 | 0.0169 | +1.29  | +0.0000 | +0.0004
-FBP_UNet_V1                    | CHAMBOLLE_POCK | 18.74 | 0.305 | 0.0166 | +1.13  | +0.0000 | +0.0007
-```
-
-### Workflow 3: Parameter Sweep
-```python
-# Python script for custom parameter testing
-from src.utils.refining_registry import get_refining_method
-
-# Test different lambda values
-for lambda_val in [0.05, 0.1, 0.15, 0.2]:
-    refining = get_refining_method('FISTA_TV')
-    refined = refining(initial_image=output, lambda_tv=lambda_val)
-    # Calculate and compare metrics
-```
-
----
-
-## Advanced Topics
-
-### Custom Metrics
-
-To add custom metrics to refining evaluation, modify `src/utils/train_test.py`:
-
-```python
-# In apply_refining_to_dataset function
-refined_results[i] = {
-    'mse': mse,
-    'psnr': psnr,
-    'ssim': ssim_val,
-    'custom_metric': your_metric_function(refined_np, original_np)
-}
-```
-
-### Conditional Refining
-
-Apply refining only to certain samples:
-
-```python
-def conditional_refining(model_output, threshold=20.0):
-    # Calculate PSNR of model output
-    psnr = calculate_psnr(model_output, ground_truth)
-    
-    # Only refine if PSNR is below threshold
-    if psnr < threshold:
-        refining = get_refining_method('FISTA_TV')
-        return refining(initial_image=model_output)
-    else:
-        return model_output
-```
-
-### Ensemble Refining
-
-Combine multiple methods:
-
-```python
-# Average outputs from different methods
-methods = ['FISTA_TV', 'CHAMBOLLE_POCK', 'ADMM_TV']
-refined_outputs = []
-
-for method_name in methods:
-    method = get_refining_method(method_name)
-    refined = method(initial_image=model_output)
-    refined_outputs.append(refined)
-
-# Average ensemble
-final_output = np.mean(refined_outputs, axis=0)
-```
-
----
-
-## Troubleshooting
-
-### Error: "Input images must have the same dimensions"
-- **Cause**: SSIM calculation requires same-sized images
-- **Solution**: Check squeeze operations, ensure 2D arrays
-- **Fix**: Code now handles this automatically (returns SSIM=0 if shapes differ)
-
-### Error: "initial_image is required"
-- **Cause**: Refining method called without image
-- **Solution**: Always pass `initial_image=your_tensor`
-
-### Slow Performance
-- **Cause**: Too many iterations or using ADMM_TV
-- **Solution**: 
-  - Reduce iterations (try 30 instead of 50)
-  - Use FISTA_TV instead of ADMM_TV
-  - Process smaller batches
-
-### No Improvement Observed
-- **Possible causes**:
-  - Lambda too low (increase to 0.15-0.2)
-  - Model output already optimal
-  - Data characteristics don't benefit from TV
-- **Solution**: Try different lambda values, compare methods
-
----
-
-## References
-
-- **Total Variation**: Rudin, L. I., Osher, S., & Fatemi, E. (1992). Nonlinear total variation based noise removal algorithms.
-- **FISTA**: Beck, A., & Teboulle, M. (2009). A fast iterative shrinkage-thresholding algorithm for linear inverse problems.
-- **Chambolle-Pock**: Chambolle, A., & Pock, T. (2011). A first-order primal-dual algorithm for convex problems.
-- **ADMM**: Boyd, S., et al. (2011). Distributed optimization and statistical learning via ADMM.
-
----
-
-## Summary
-
-The refining system provides:
-- ✅ Easy integration with existing models
-- ✅ Multiple TV-based methods
-- ✅ Comprehensive benchmarking
-- ✅ Extensible registry pattern
-- ✅ Automatic metrics tracking
-- ✅ CLI and Python API support
 
 For questions or issues, refer to the main project documentation or create an issue on GitHub.
