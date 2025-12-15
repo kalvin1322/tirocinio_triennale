@@ -140,7 +140,8 @@ def test(
     checkpoint: str = typer.Option(..., "--checkpoint", "-c", help="Model checkpoint filename (e.g., FBP_UNet_V1_enc2_ch32.pth)"),
     model: str = typer.Option(None, "--model", "-m", help="Model name (e.g., UNet_V1, PostProcessNet). Auto-detected if not specified."),
     visualize: bool = typer.Option(False, "--visualize", "-v", help="Generate visualization plots"),
-    num_samples: int = typer.Option(5, "--num-samples", "-n", help="Number of samples to visualize")
+    num_samples: int = typer.Option(5, "--num-samples", "-n", help="Number of samples to visualize"),
+    refining: str = typer.Option(None, "--refining", "-r", help="Refining method to apply (FISTA_TV, CHAMBOLLE_POCK, ADMM_TV)")
 ):
     """
     🧪 Test a trained model
@@ -154,6 +155,12 @@ def test(
       
       # Test with visualization
       python main.py test -c FBP_ThreeL_SSNet.pth --visualize --num-samples 10
+      
+      # Test with refining
+      python main.py test -c FBP_UNet_V1.pth --refining FISTA_TV
+      
+      # Test with refining and visualization
+      python main.py test -c FBP_UNet_V1.pth --refining CHAMBOLLE_POCK --visualize
       
       # Specify experiment
       python main.py test -e my_experiment -c FBP_UNet_V1.pth
@@ -211,7 +218,8 @@ def test(
         output=exp_config['output_dirs']['results'],
         experiment_name=exp_config['experiment']['name'],
         visualize=visualize,
-        num_samples=num_samples
+        num_samples=num_samples,
+        refining=refining
     )
 
 

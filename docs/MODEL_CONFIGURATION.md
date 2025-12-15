@@ -28,7 +28,6 @@ The model configuration is stored in `configs/models_config.json` with the follo
       "name": "FBP",
       "description": "Filtered Back Projection reconstruction",
       "type": "reconstruction",
-      "requires_training": false
     }
   },
   "postprocessing": {
@@ -36,7 +35,6 @@ The model configuration is stored in `configs/models_config.json` with the follo
       "name": "UNet_V1",
       "description": "U-Net architecture for image denoising",
       "model_class": "UNet_V1",
-      "requires_training": true,
       "default_loss": "L1Loss",
       "default_lr": 0.001
     },
@@ -44,7 +42,6 @@ The model configuration is stored in `configs/models_config.json` with the follo
       "name": "ThreeL_SSNet",
       "description": "Three-Level Similarity Structure Network",
       "model_class": "ThreeL_SSNet",
-      "requires_training": true,
       "default_loss": "MSELoss",
       "default_lr": 0.001
     }

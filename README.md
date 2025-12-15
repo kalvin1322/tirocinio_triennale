@@ -11,7 +11,7 @@ conda env create -f environment.yml
 conda activate tirocinio
 ```
 
-
+**In case the command above doesn't work, install manually every single library following the steps in this **[Installation Guide](./DEPENDENCIES.md)****
 ### 2. Launch Interactive Mode (Recommended)
 
 ```bash
@@ -256,11 +256,11 @@ They must be set in `configs/models_config.json` before training. See [Model Con
 
 ## 📚 Additional Documentation
 
-- **[CLI Usage Guide](docs/CLI_USAGE.md)** - Complete command-line reference for automation and HPC
+- **[CLI Usage Guide](docs/CLI_USAGE.md)** - Complete command-line reference for automation
 - **[Model Configuration Guide](docs/MODEL_CONFIGURATION.md)** - How to add/configure models
 - **[Experiments System Guide](docs/EXPERIMENTS_SYSTEM.md)** - Complete guide to the experiments system
 - **[projection_geometry_guide](docs/projection_geometry_guide.md)** - Guide for CT machine configuratio
 - **[Adding Pre-processing method](docs/ADDING_PREPROCESSING_METHODS.md)** -  Guide to add pre-processing methods
 - **[Adding Custom Dataset](data/README.md)** - Guide to add custom dataset
-- **[Adding Custom Refining Method](docs/REFINING_GUIDE.md) - Guide to add custom refining method
+- **[Adding Custom Refining Method](docs/REFINING_GUIDE.md)** - Guide to add custom refining method
 

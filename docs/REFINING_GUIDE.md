@@ -8,17 +8,6 @@ The refining system uses a **registry pattern**, making it easy to add new metho
 
 ---
 
-## Table of Contents
-
-1. [Available Refining Methods](#available-refining-methods)
-2. [Using Refining Methods](#using-refining-methods)
-3. [Adding New Refining Methods](#adding-new-refining-methods)
-4. [Modifying Existing Methods](#modifying-existing-methods)
-5. [Technical Details](#technical-details)
-6. [Best Practices](#best-practices)
-
----
-
 ## Available Refining Methods
 
 The following TV-based refining methods are currently available:
@@ -216,48 +205,7 @@ python run.py test --model UNet_V1 --checkpoint path/to/model.pth --refining MY_
 
 ---
 
-## Modifying Existing Methods
 
-### Changing Default Parameters
-
-Edit the wrapper in `src/utils/refining_registry.py`:
-
-```python
-def fista_tv_wrapper(iterations=100, lambda_tv=0.05, initial_image=None):
-    """Changed defaults: more iterations, less regularization"""
-    return run_fista_tv_reconstruction(
-        iterations=iterations,
-        lambda_tv=lambda_tv,
-        initial_image=initial_image
-    )
-```
-
-### Modifying Algorithm Behavior
-
-Edit the implementation file (e.g., `src/models/Fista_Tv_recostruction.py`):
-
-```python
-def run_fista_tv_reconstruction(sinogram=None, geometry_config=None, 
-                                 iterations=50, lambda_tv=0.1, 
-                                 lip_const=None, initial_image=None):
-    # Image refining mode (post-neural network)
-    if initial_image is not None:
-        # ... existing tensor conversion code ...
-        
-        # MODIFY THIS SECTION
-        x = img.astype(np.float32)
-        
-        # Example: Add preprocessing
-        x = your_preprocessing(x)
-        
-        # Apply TV denoising
-        x = denoise_tv_chambolle(x, weight=lambda_tv)
-        
-        # Example: Add postprocessing
-        x = your_postprocessing(x)
-        
-        return x
-```
 
 **Testing after modifications**:
 ```bash
@@ -267,48 +215,6 @@ python run.py test --model SimpleResNet --checkpoint path/to/checkpoint.pth --re
 
 ---
 
-## Technical Details
-
-### How Refining Works
-
-1. **Neural Network Output**: Model produces initial reconstruction
-2. **Refining Application**: TV method applied to reduce noise
-3. **Metrics Calculation**: Compare refined vs original images
-4. **Improvement Tracking**: Calculate Δ metrics (PSNR, SSIM, MSE)
-
-### Data Flow
-
-```
-Original Image
-     ↓
-Sinogram (noisy)
-     ↓
-FBP Reconstruction
-     ↓
-Neural Network → Model Output
-     ↓
-Refining Method → Refined Output
-     ↓
-Metrics Calculation (vs Original)
-```
-
-### Performance Optimization
-
-The refining methods have been optimized:
-- **Single Call**: `denoise_tv_chambolle` called once (not in a loop)
-- **GPU Inference**: Model runs with `torch.inference_mode()`
-- **Memory Management**: Cache cleared every 10 samples
-- **Batch Processing**: Efficient handling of multiple images
-
-### Metrics Tracked
-
-For each refining method, the system tracks:
-- **Pre-refining metrics**: PSNR, SSIM, MSE (baseline)
-- **Post-refining metrics**: PSNR, SSIM, MSE (after refining)
-- **Improvements**: Δ PSNR, Δ SSIM, Δ MSE
-- **Percentage improvements**: For MSE reduction
-
----
 
 
 For questions or issues, refer to the main project documentation or create an issue on GitHub.

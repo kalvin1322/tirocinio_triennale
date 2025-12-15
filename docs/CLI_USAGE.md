@@ -120,9 +120,6 @@ These parameters are **dynamically accepted** based on the model configuration i
 
 **Preprocessing Parameters:**
 
-⚠️ **Important**: Preprocessing parameters (e.g., SART/SIRT iterations) are **NOT configurable via CLI**.  
-They must be set in `configs/models_config.json` before training.
-
 Example `models_config.json`:
 ```json
 {
