@@ -116,6 +116,13 @@ dataset = CTDataset(
     geometry_config="my_custom_geometry"  # ← Use your new geometry
 )
 ```
+**WARNIG: you need to adjust also at line 294 in commands.py otherwise if you plot the results you will recive a warning and in the final plot there won't be the sinogram**
+```python
+ try:
+      proj_geom = load_projection_geometry("my_custom_geometry")  # ← Use your new geometry
+      sinogram = astra_projection(proj_geom, original_image)
+```
+
 ## 📚 Additional Resources
 
 - ASTRA Toolbox documentation: https://www.astra-toolbox.com/

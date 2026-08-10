@@ -13,7 +13,7 @@ def plot_image(image, title="Image"):
     plt.axis('off')
     plt.show()
 
-def astra_projection(image, angles: int = 180, detector_width: int = 768, dist_source_origin: float = 1000, dist_origin_detector: float = 500):
+def astra_projection(proj_geom,image):
     """
     Create sinogram using ASTRA toolbox with fanbeam geometry
     """
@@ -35,19 +35,6 @@ def astra_projection(image, angles: int = 180, detector_width: int = 768, dist_s
     # 1. Creating the volume geometry
     vol_geom = astra.create_vol_geom(image_np.shape[0], image_np.shape[1])
 
-    # 2. Creating the projection geometry
-    num_angles = angles       
-    angles = np.linspace(0, np.pi, num_angles, False)
-
-
-    proj_geom = astra.create_proj_geom(
-        'fanflat',              # type of geometry
-        1.0,                    # distance between the centers of two adjacent detector pixels
-        detector_width,         # number of detector pixels
-        angles,                 # projection angles in radians
-        dist_source_origin,     # distance between the source and the center of rotation DSO
-        dist_origin_detector    # distance between the center of rotation and the detector array DOD
-    )
 
     # 5. Creation of the projector
     projector_id = astra.create_projector('cuda', proj_geom, vol_geom)

@@ -68,7 +68,7 @@ class CTDataset(Dataset):
         original_image_tensor = self.to_tensor(pil_image)
         
         # Create sinogram from original image
-        sinogram = astra_projection(original_image_tensor)
+        sinogram = astra_projection(self.proj_geom, original_image_tensor)
         
         # Apply noise
         noise = gaussian_noise(torch.from_numpy(sinogram), noise_level="0.01")

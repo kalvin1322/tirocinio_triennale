@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
-
+from skimage.metrics import structural_similarity as ssim
 def save_model(model: torch.nn.Module, model_name: str = None, output_path: str = None, metadata: dict = None):
     """Saves a PyTorch model to the specified directory along with metadata.
     
@@ -158,7 +158,7 @@ def save_visualization_plots(original_image: torch.Tensor, sinogram: np.ndarray,
     
     # FBP reconstruction
     axes[2].imshow(fbp_reconstruction, cmap='gray')
-    axes[2].set_title("3. Ricostruzione FBP (Input)")
+    axes[2].set_title("3. Ricostruzione (Input)")
     axes[2].axis('off')
     
     # Model reconstruction
@@ -326,7 +326,7 @@ def apply_refining_to_dataset(model_instance, refining_model, test_dataset, devi
             psnr = 10 * np.log10(1.0 / mse) if mse > 0 else float('inf')
             
             # Compute SSIM
-            from skimage.metrics import structural_similarity as ssim
+            
             refined_np = refined_output.squeeze().cpu().numpy()
             original_np = original_image.numpy()
             

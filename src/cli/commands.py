@@ -26,6 +26,7 @@ from src.utils.utilities import astra_projection
 from src.utils.postprocessing_registry import get_postprocessing_model, list_postprocessing_models
 from src.utils.model_params import build_model_params, validate_param, get_model_filename
 from src.utils.refining_registry import get_refining_method, get_all_refining_methods
+from src.utils.geometry_config import load_projection_geometry
 console = Console()
 
 
@@ -290,7 +291,8 @@ def test_cmd(model: str, checkpoint: str, dataset: str, output: str, experiment_
             
             # Create sinogram only for visualization (lazy creation)
             try:
-                sinogram = astra_projection(original_image)
+                proj_geom = load_projection_geometry("default")
+                sinogram = astra_projection(proj_geom, original_image)
             except Exception as e:
                 console.print(f"\n[yellow]Warning: Could not create sinogram for sample {i}: {e}[/yellow]")
                 # Use a placeholder if sinogram creation fails
